@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -30,22 +31,47 @@
               <span>Hoofdmenu</span>
             </a>
             <div class="page-meta">
-              Placeholderpagina voor <strong>Standings</strong>.<br />
-              Later vullen we deze met tabellen, statistieken en filters.
+              Live overzicht via de officiële ISU-website.<br />
+              De tabel hieronder laadt rechtstreeks vanaf isu-skating.com.
             </div>
           </div>
         </header>
 
-        <div class="page-placeholder">
-          <p>
-            Dit is de module <strong>Standings</strong>. Hier kun je straks zelf de data en
-            tabellen toevoegen die je via GitHub beheert.
-          </p>
-          <p>
-            Voor nu is dit een eenvoudige placeholder. Als je wilt, kunnen we per module
-            verder uitwerken welke kolommen, filters en visualisaties je nodig hebt.
-          </p>
-        </div>
+        <section class="embed-section" aria-label="World standings embeds">
+          <div class="embed-card">
+            <div class="embed-card-header">
+              <div>
+                <div class="embed-title">ISU World Standings</div>
+                <div class="embed-subtitle">
+                  Overzicht rechtstreeks van de officiële ISU-pagina.
+                </div>
+              </div>
+              <div class="embed-badge">Live data · extern</div>
+            </div>
+
+            <div class="embed-frame-wrap">
+              <!--
+                Als ISU het embedden via iframe blokkeert (X-Frame-Options / CSP),
+                kan dit vlak leeg blijven. In dat geval gebruik je altijd de link hieronder.
+              -->
+              <iframe
+                class="embed-frame"
+                src="https://isu-skating.com/short-track/world-standings/11260/"
+                loading="lazy"
+              ></iframe>
+            </div>
+
+            <p class="embed-note">
+              Dit is een directe weergave van de officiële ISU-website
+              (<a
+                href="https://isu-skating.com/short-track/world-standings/11260/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >open in nieuw tabblad</a
+              >). De inhoud wordt beheerd door de ISU en kan niet in deze hub worden aangepast.
+            </p>
+          </div>
+        </section>
       </section>
     </main>
   </body>
