@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -11,11 +12,12 @@
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-
+    <!-- Excel parser (client-side only, geen server nodig) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script defer src="./assets/data-loader.js"></script>
   </head>
   <body>
     <main class="app-shell">
-
       <header class="header">
         <div class="brand">
           <div class="brand-logo">
@@ -35,6 +37,35 @@
           <span><strong>Start hier &mdash; kies een module.</strong></span>
         </div>
       </header>
+
+      <section class="upload-panel" aria-label="Excel data upload voor Shorttrack Hub">
+        <div class="upload-main">
+          <div class="upload-textblock">
+            <div class="upload-title">Datafile shorttrack hub</div>
+            <p class="upload-subtitle">
+              Upload hier één Excel-bestand met alle tabellen (standings, world champions,
+              skaters, etc.). De inhoud wordt lokaal in je browser gelezen en kan later door
+              andere pagina&apos;s gebruikt worden.
+            </p>
+          </div>
+          <div>
+            <button type="button" class="upload-button" id="dataUploadButton">
+              <span>⬆</span>
+              <span>Upload Excel</span>
+            </button>
+            <input
+              type="file"
+              id="dataFileInput"
+              accept=".xlsx,.xls"
+              hidden
+              aria-hidden="true"
+            />
+          </div>
+        </div>
+        <div class="upload-meta" id="uploadMeta">
+          <span>Nog geen bestand geladen.</span>
+        </div>
+      </section>
 
       <section class="nav-grid" aria-label="Shorttrack modules">
         <a class="nav-card" href="standings/index.html">
@@ -156,7 +187,6 @@
           </div>
         </a>
       </section>
-
     </main>
   </body>
 </html>

@@ -335,6 +335,92 @@ body {
   box-shadow: 0 0 10px rgba(82, 232, 232, 0.5);
 }
 
+/* UPLOAD PANEL (HOME) */
+
+.upload-panel {
+  margin-bottom: 1.8rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: 1.3rem;
+  border: 1px solid rgba(116, 131, 180, 0.75);
+  background: radial-gradient(circle at top left, rgba(82, 232, 232, 0.12), rgba(7, 10, 24, 0.98));
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.upload-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+}
+
+.upload-textblock {
+  max-width: 70%;
+}
+
+.upload-title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin-bottom: 0.25rem;
+}
+
+.upload-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(82, 232, 232, 0.9);
+  background: linear-gradient(135deg, var(--color-accent), #8bf3f3);
+  color: #02030a;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(82, 232, 232, 0.75);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.upload-button span:first-child {
+  font-size: 1rem;
+}
+
+.upload-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 24px rgba(82, 232, 232, 0.9);
+}
+
+.upload-button:active {
+  transform: translateY(0);
+  box-shadow: 0 0 14px rgba(82, 232, 232, 0.7);
+}
+
+.upload-meta {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.upload-meta strong {
+  color: var(--color-accent);
+}
+
+.upload-sheets {
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+}
+
 /* EMBED CARD (IFRAME WRAPPER VOOR STANDINGS) */
 
 .embed-section {
@@ -635,6 +721,15 @@ body {
   .embed-card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .upload-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .upload-textblock {
+    max-width: 100%;
   }
 }
 
