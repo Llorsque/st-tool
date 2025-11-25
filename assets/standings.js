@@ -68,11 +68,11 @@
     const sheets = data.sheets;
 
     const TAB_CONFIG = {
-      "overall-men": { sheetName: "Overall Men", extra: "overall" },
-      "500-men": { sheetName: "500 Men", extra: "500" },
-      "1000-men": { sheetName: "1000 Men", extra: "plain" },
-      "1500-men": { sheetName: "1500 Men", extra: "plain" },
-      "relay-men": { sheetName: "Relay Men", extra: "plain" },
+      "overall-men": { sheetName: "Overall Men", withRounds: false },
+      "500-men": { sheetName: "500 Men", withRounds: true },
+      "1000-men": { sheetName: "1000 Men", withRounds: true },
+      "1500-men": { sheetName: "1500 Men", withRounds: true },
+      "relay-men": { sheetName: "Relay Men", withRounds: true },
     };
 
     let activeTabKey = "overall-men";
@@ -118,12 +118,15 @@
       const cfg = TAB_CONFIG[tabKey];
       const rows = sheet.rows.map(function (row) {
         const base = baseRowFromSheetRow(row);
-        if (cfg.extra === "500") {
+
+        if (cfg.withRounds) {
           // F=5, G=6, H=7 omzetten van punten naar klassering
-          base.r1 = pointsToRank(row[5]);
-          base.r2 = pointsToRank(row[6]);
-          base.r3 = pointsToRank(row[7]);
+          // Labels in UI: CAN 1 (F), CAN 2 (G), POL (H)
+          base.can1 = pointsToRank(row[5]);
+          base.can2 = pointsToRank(row[6]);
+          base.pol = pointsToRank(row[7]);
         }
+
         return base;
       });
 
@@ -140,7 +143,7 @@
         }
 
         if (search) {
-          const haystack = [row.rank, row.name, row.land, row.total]
+          const haystack = [row.rank, row.name, row.land, row.total, row.can1, row.can2, row.pol]
             .join(" ")
             .toLowerCase();
           if (!haystack.includes(search)) return false;
@@ -179,8 +182,7 @@
 
     function renderActiveTab() {
       const rows = buildRowsForTab(activeTabKey);
-      const allRows = rows.slice();
-      populateLandFilter(allRows);
+      populateLandFilter(rows);
 
       const filtered = applyFilters(rows);
       const tbody = getPanelBody(activeTabKey);
@@ -209,15 +211,16 @@
             return cell;
           }
 
+          const cfg = TAB_CONFIG[activeTabKey];
+
           tr.appendChild(td(row.rank, "standings-col-rank"));
           tr.appendChild(td(row.name));
           tr.appendChild(td(row.land, "standings-col-country"));
 
-          const cfg = TAB_CONFIG[activeTabKey];
-          if (cfg && cfg.extra === "500") {
-            tr.appendChild(td(row.r1 || ""));
-            tr.appendChild(td(row.r2 || ""));
-            tr.appendChild(td(row.r3 || ""));
+          if (cfg && cfg.withRounds) {
+            tr.appendChild(td(row.can1 || ""));
+            tr.appendChild(td(row.can2 || ""));
+            tr.appendChild(td(row.pol || ""));
           }
 
           tr.appendChild(td(row.total, "standings-col-total"));
