@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -5,47 +6,98 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Head to Head | Shorttrack Hub</title>
     <link rel="stylesheet" href="../assets/styles.css" />
+    <link rel="stylesheet" href="../assets/head-to-head.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script defer src="../assets/head-to-head.js"></script>
   </head>
   <body>
     <main class="app-shell">
-      <section class="page-layout">
-        <header class="page-header-line">
+      <section class="h2h-layout">
+        <header class="h2h-header-line">
           <div>
             <div class="breadcrumb">
               <a href="../index.html">Shorttrack Hub</a>
               <span>/</span>
               <span>Head to Head</span>
             </div>
-            <h1 class="page-title">Head to Head</h1>
+            <h1 class="h2h-title">Head to Head</h1>
+            <p class="h2h-subtitle">
+              Selecteer tot <strong>8 rijders</strong> en vergelijk CAN 1 / CAN 2 / POL (uit de
+              gekozen afstand), de <strong>Overall ranking</strong> (uit Overall Men/Women), en de
+              <strong>tijd</strong> (kolom K van de afstand).
+            </p>
           </div>
           <div class="page-header-actions">
             <a href="../index.html" class="home-button">
               <span>←</span>
               <span>Hoofdmenu</span>
             </a>
-            <div class="page-meta">
-              Placeholderpagina voor <strong>Head to Head</strong>.<br />
-              Later vullen we deze met tabellen, statistieken en filters.
-            </div>
           </div>
         </header>
 
-        <div class="page-placeholder">
-          <p>
-            Dit is de module <strong>Head to Head</strong>. Hier kun je straks zelf de data en
-            tabellen toevoegen die je via GitHub beheert.
-          </p>
-          <p>
-            Voor nu is dit een eenvoudige placeholder. Als je wilt, kunnen we per module
-            verder uitwerken welke kolommen, filters en visualisaties je nodig hebt.
-          </p>
-        </div>
+        <section class="h2h-controls" aria-label="Head to head controls">
+          <div class="h2h-toprow">
+            <div class="h2h-gender-toggle" role="group" aria-label="Kies Men of Women">
+              <button class="h2h-gender-btn is-active" type="button" data-gender="men">
+                Men
+              </button>
+              <button class="h2h-gender-btn" type="button" data-gender="women">
+                Women
+              </button>
+            </div>
+
+            <div class="h2h-distance-tabs" role="tablist" aria-label="Afstand keuzes">
+              <button class="h2h-distance-btn is-active" type="button" data-distance="500">
+                500m
+              </button>
+              <button class="h2h-distance-btn" type="button" data-distance="1000">
+                1000m
+              </button>
+              <button class="h2h-distance-btn" type="button" data-distance="1500">
+                1500m
+              </button>
+              <button class="h2h-distance-btn" type="button" data-distance="relay">
+                Relay
+              </button>
+              <button class="h2h-distance-btn" type="button" data-distance="mixed">
+                Mixed relay
+              </button>
+            </div>
+          </div>
+
+          <div id="h2hStatus" class="h2h-status"></div>
+
+          <div
+            id="h2hPickerGrid"
+            class="h2h-picker-grid"
+            aria-label="Selecteer rijders (max 8)"
+          ></div>
+        </section>
+
+        <section aria-label="Head to head results">
+          <div class="h2h-table-wrap">
+            <table class="h2h-table">
+              <thead>
+                <tr>
+                  <th>Rijder</th>
+                  <th class="h2h-col-small">Land</th>
+                  <th class="h2h-col-small">CAN 1</th>
+                  <th class="h2h-col-small">CAN 2</th>
+                  <th class="h2h-col-small">POL</th>
+                  <th class="h2h-col-small">Overall</th>
+                  <th class="h2h-col-time">Time (K)</th>
+                </tr>
+              </thead>
+              <tbody id="h2hBody"></tbody>
+            </table>
+          </div>
+          <p id="h2hTableTitle" class="h2h-status" style="margin-top: 0.65rem"></p>
+        </section>
       </section>
     </main>
   </body>
