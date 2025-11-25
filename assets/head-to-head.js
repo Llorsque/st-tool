@@ -234,7 +234,6 @@
       return val && String(val).trim() ? String(val).trim() : "-";
     }
 
-    // WT = kolom A uit het tabblad van de gekozen afstand
     function getWTFromDistance(name) {
       const row = getDistanceRow(name);
       const wt = row ? row[0] : ""; // A
@@ -242,7 +241,6 @@
     }
 
     function getLand(name) {
-      // Land altijd gevuld: prefer overall (E), fallback distance (E), else "-"
       const o = getOverallRow(name);
       const d = getDistanceRow(name);
       const land = (o && o[4]) || (d && d[4]) || "";
@@ -287,7 +285,7 @@
 
       return filtered.map((opt) => ({
         value: opt.name,
-        label: opt.name,                 // ✅ dropdown label: alleen naam
+        label: opt.name,
         meta: opt.land ? opt.land : "",
       }));
     }
@@ -327,7 +325,7 @@
       if (!picked.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 7;
+        td.colSpan = 8;
         td.className = "h2h-empty";
         td.textContent = "Selecteer één of meer rijders (max 8) om te vergelijken.";
         tr.appendChild(td);
@@ -350,6 +348,7 @@
           return td;
         }
 
+        tr.appendChild(cell(name));
         tr.appendChild(cell(land, "h2h-col-small"));
         tr.appendChild(cell(fields.can1, "h2h-col-small"));
         tr.appendChild(cell(fields.can2, "h2h-col-small"));
@@ -362,7 +361,6 @@
       });
     }
 
-    // --- Combobox component ---
     function createCombobox({ mountEl, slotIndex }) {
       const wrapper = document.createElement("div");
       wrapper.className = "h2h-combobox";
@@ -513,7 +511,6 @@
       };
     }
 
-    // Init UI
     genderBtns.forEach((btn) => {
       btn.addEventListener("click", () => setActiveGender(btn.dataset.gender));
     });
@@ -522,7 +519,6 @@
       btn.addEventListener("click", () => setActiveDistance(btn.dataset.distance));
     });
 
-    // Build 8 pickers
     if (pickerGrid) {
       pickerGrid.innerHTML = "";
       for (let i = 0; i < 8; i++) {
