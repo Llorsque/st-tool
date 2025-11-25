@@ -1,11 +1,11 @@
+
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     const fileInput = document.getElementById("dataFileInput");
     const button = document.getElementById("dataUploadButton");
     const metaEl = document.getElementById("uploadMeta");
-
-    const STORAGE_META_KEY = "shorttrack_hub_excel_meta_v1";
-    const STORAGE_DATA_KEY = "shorttrack_hub_excel_data_v1";
+    const META_KEY = "shorttrack_hub_excel_meta_v1";
+    const DATA_KEY = "shorttrack_hub_excel_data_v1";
 
     if (!fileInput || !button || !metaEl) return;
 
@@ -34,9 +34,9 @@
       metaEl.innerHTML = html;
     }
 
-    // Probeer oude info uit localStorage te lezen
+    // Probeer oude meta-info uit localStorage te lezen
     try {
-      const stored = localStorage.getItem(STORAGE_META_KEY);
+      const stored = localStorage.getItem(META_KEY);
       if (stored) {
         const meta = JSON.parse(stored);
         renderMeta(meta);
@@ -71,79 +71,75 @@
         const arrayBuffer = await file.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
-        const sheetMeta = workbook.SheetNames.map(function (name) {
-          const ws = workbook.Sheets[name];
-          let rows = null;
-          if (ws && ws["!ref"]) {
-            const range = XLSX.utils.decode_range(ws["!ref"]);
-            rows = range.e.r - range.s.r + 1;
-          }
-          return { name: name, rows: rows };
-        });
-
-        const meta = {
-          fileName: file.name,
-          sheetCount: sheetMeta.length,
-          sheets: sheetMeta,
-          loadedAt: new Date().toLocaleString(),
-        };
-
-        // Parsed data: per sheet een array met rijen (objects op basis van headers)
-        const parsed = {
-          version: 1,
-          fileName: file.name,
-          loadedAtISO: new Date().toISOString(),
-          sheets: {},
-        };
+        const sheetsMeta = [];
+        const sheetsData = {};
 
         workbook.SheetNames.forEach(function (name) {
           const ws = workbook.Sheets[name];
           if (!ws) return;
 
-          // raw:false => pakt de "weergavewaarde" (handig voor leading zeros / opmaak)
-          const rows = XLSX.utils.sheet_to_json(ws, {
-            defval: "",
-            raw: false,
-            blankrows: false,
-          });
-
-          // headers (voor mapping / kolomkeuze)
-          const headerRow = XLSX.utils.sheet_to_json(ws, {
+          // Haal de sheet op als 2D-array (eerste rij = headers)
+          const sheetArray = XLSX.utils.sheet_to_json(ws, {
             header: 1,
             defval: "",
-            raw: false,
-            blankrows: false,
           });
 
-          const headers =
-            Array.isArray(headerRow) && Array.isArray(headerRow[0])
-              ? headerRow[0].map(function (h) {
-                  return String(h || "").trim();
-                })
-              : [];
+          if (!sheetArray || !sheetArray.length) return;
 
-          parsed.sheets[name] = {
+          const headers = sheetArray[0].map(function (cell) {
+            return String(cell == null ? "" : cell).trim();
+          });
+
+          const dataRows = sheetArray
+            .slice(1)
+            .filter(function (row) {
+              // Filter lege rijen eruit
+              return row.some(function (cell) {
+                return String(cell).trim() !== "";
+              });
+            });
+
+          sheetsMeta.push({
+            name: name,
+            rows: dataRows.length,
+          });
+
+          sheetsData[name] = {
             headers: headers,
-            rows: rows,
+            rows: dataRows,
           };
         });
 
+        const loadedAt = new Date().toLocaleString();
+
+        const meta = {
+          fileName: file.name,
+          sheetCount: sheetsMeta.length,
+          sheets: sheetsMeta,
+          loadedAt: loadedAt,
+        };
+
+        // Sla compacte meta-info op (voor weergave op de homepage)
         try {
-          localStorage.setItem(STORAGE_META_KEY, JSON.stringify(meta));
+          localStorage.setItem(META_KEY, JSON.stringify(meta));
         } catch (e) {
           console.warn("Kon Excel-meta niet opslaan in localStorage:", e);
         }
 
-        // Data kan groter zijn dan localStorage toelaat. Daarom in try/catch met duidelijke melding.
+        // Sla volledige data op in een aparte key (voor modules zoals Standings / Men's Skaters)
+        const fullData = {
+          fileName: file.name,
+          loadedAt: loadedAt,
+          sheets: sheetsData,
+        };
+
         try {
-          localStorage.setItem(STORAGE_DATA_KEY, JSON.stringify(parsed));
+          localStorage.setItem(DATA_KEY, JSON.stringify(fullData));
         } catch (e) {
-          console.warn("Kon Excel-data niet opslaan in localStorage:", e);
-          // We tonen een hint: bestand mogelijk te groot.
-          metaEl.innerHTML =
-            "<span><strong>Bestand geladen, maar data is te groot om op te slaan in de browser.</strong><br/>" +
-            "<small>Tip: maak je Excel compacter (minder tabs/rijen) of splits per module. Meta-info is wel opgeslagen.</small></span>";
-          return;
+          console.warn(
+            "Kon volledige Excel-data niet opslaan in localStorage (bestand mogelijk te groot):",
+            e
+          );
         }
 
         renderMeta(meta);
