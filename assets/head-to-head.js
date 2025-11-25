@@ -228,10 +228,16 @@
       return distanceIndex.get(normalize(name)) || null;
     }
 
-    // ✅ WT moet kolom A zijn uit het tabblad van de gekozen afstand.
+    function getOverallRank(name) {
+      const row = getOverallRow(name);
+      const val = row ? row[0] : ""; // A
+      return val && String(val).trim() ? String(val).trim() : "-";
+    }
+
+    // WT = kolom A uit het tabblad van de gekozen afstand
     function getWTFromDistance(name) {
       const row = getDistanceRow(name);
-      const wt = row ? row[0] : "";
+      const wt = row ? row[0] : ""; // A
       return wt && String(wt).trim() ? String(wt).trim() : "-";
     }
 
@@ -279,15 +285,11 @@
         return hay.includes(q);
       });
 
-      return filtered.map((opt) => {
-        // ✅ label toont nu kolom A uit de gekozen afstand (of "-")
-        const distRank = getWTFromDistance(opt.name);
-        return {
-          value: opt.name,
-          label: distRank + ". " + opt.name,
-          meta: opt.land ? opt.land : "",
-        };
-      });
+      return filtered.map((opt) => ({
+        value: opt.name,
+        label: opt.name,                 // ✅ dropdown label: alleen naam
+        meta: opt.land ? opt.land : "",
+      }));
     }
 
     function onSelect(name, slotIndex) {
@@ -336,6 +338,7 @@
       picked.forEach((name) => {
         const land = getLand(name);
         const fields = getDistanceFields(name);
+        const overall = getOverallRank(name);
         const wt = getWTFromDistance(name);
 
         const tr = document.createElement("tr");
@@ -347,18 +350,19 @@
           return td;
         }
 
-        tr.appendChild(cell(name));
         tr.appendChild(cell(land, "h2h-col-small"));
         tr.appendChild(cell(fields.can1, "h2h-col-small"));
         tr.appendChild(cell(fields.can2, "h2h-col-small"));
         tr.appendChild(cell(fields.pol, "h2h-col-small"));
-        tr.appendChild(cell(fields.time, "h2h-col-time"));
+        tr.appendChild(cell(overall, "h2h-col-small"));
         tr.appendChild(cell(wt, "h2h-col-small"));
+        tr.appendChild(cell(fields.time, "h2h-col-time"));
 
         tableBody.appendChild(tr);
       });
     }
 
+    // --- Combobox component ---
     function createCombobox({ mountEl, slotIndex }) {
       const wrapper = document.createElement("div");
       wrapper.className = "h2h-combobox";
@@ -509,6 +513,7 @@
       };
     }
 
+    // Init UI
     genderBtns.forEach((btn) => {
       btn.addEventListener("click", () => setActiveGender(btn.dataset.gender));
     });
@@ -517,6 +522,7 @@
       btn.addEventListener("click", () => setActiveDistance(btn.dataset.distance));
     });
 
+    // Build 8 pickers
     if (pickerGrid) {
       pickerGrid.innerHTML = "";
       for (let i = 0; i < 8; i++) {
