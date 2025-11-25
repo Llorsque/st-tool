@@ -55,8 +55,6 @@
     if (typeof value === "string") return value.trim();
 
     if (typeof value === "number") {
-      // Excel time can be stored as fraction of a day.
-      // Convert to seconds and format mm:ss.fff (best effort).
       const totalSeconds = value * 86400;
       if (!isFinite(totalSeconds) || totalSeconds <= 0) return String(value);
 
@@ -75,13 +73,11 @@
     return String(value);
   }
 
-  // --- Sheet name resolution helpers ---
   function pickExistingSheet(sheets, candidates) {
     for (let i = 0; i < candidates.length; i++) {
       const name = candidates[i];
       if (sheets[name]) return name;
     }
-    // Try case-insensitive match
     const keys = Object.keys(sheets || {});
     const lowerMap = new Map(keys.map((k) => [k.toLowerCase(), k]));
     for (let i = 0; i < candidates.length; i++) {
@@ -112,174 +108,16 @@
   }
 
   function buildIndex(sheet) {
-    // Index rows by name (col D index 3) for fast lookup.
     const index = new Map();
     const rows = (sheet && sheet.rows) || [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const name = row && row[3];
+      const name = row && row[3]; // D
       const key = normalize(name);
       if (!key) continue;
-      // Keep first occurrence
       if (!index.has(key)) index.set(key, row);
     }
     return index;
-  }
-
-  function uniqueSorted(arr) {
-    return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b));
-  }
-
-  // --- Combobox UI ---
-  function createCombobox({ mountEl, slotIndex, getOptions, onSelect, onClear }) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "h2h-combobox";
-
-    const input = document.createElement("input");
-    input.className = "h2h-input";
-    input.type = "text";
-    input.placeholder = "Type om te zoeken…";
-    input.autocomplete = "off";
-    input.spellcheck = false;
-
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "h2h-clear";
-    clear.title = "Leegmaken";
-    clear.textContent = "×";
-
-    const dropdown = document.createElement("div");
-    dropdown.className = "h2h-dropdown";
-
-    wrapper.appendChild(input);
-    wrapper.appendChild(clear);
-    wrapper.appendChild(dropdown);
-    mountEl.appendChild(wrapper);
-
-    let highlightedIndex = -1;
-    let open = false;
-    let currentItems = [];
-
-    function render(items) {
-      dropdown.innerHTML = "";
-      currentItems = items;
-
-      if (!items.length) {
-        const empty = document.createElement("div");
-        empty.className = "h2h-option";
-        empty.textContent = "Geen resultaten";
-        dropdown.appendChild(empty);
-        highlightedIndex = -1;
-        return;
-      }
-
-      items.forEach((item, idx) => {
-        const opt = document.createElement("div");
-        opt.className = "h2h-option";
-        opt.dataset.idx = String(idx);
-        opt.innerHTML = `${item.label} <small>${item.meta || ""}</small>`;
-
-        opt.addEventListener("mousedown", (e) => {
-          // prevent blur
-          e.preventDefault();
-          selectIdx(idx);
-        });
-
-        dropdown.appendChild(opt);
-      });
-
-      highlightedIndex = -1;
-    }
-
-    function openDropdown() {
-      if (open) return;
-      open = true;
-      dropdown.classList.add("is-open");
-    }
-
-    function closeDropdown() {
-      open = false;
-      dropdown.classList.remove("is-open");
-      highlightedIndex = -1;
-      updateHighlight();
-    }
-
-    function updateHighlight() {
-      const nodes = Array.from(dropdown.querySelectorAll(".h2h-option"));
-      nodes.forEach((n) => n.classList.remove("is-highlighted"));
-      if (highlightedIndex >= 0 && highlightedIndex < nodes.length) {
-        nodes[highlightedIndex].classList.add("is-highlighted");
-        nodes[highlightedIndex].scrollIntoView({ block: "nearest" });
-      }
-    }
-
-    function selectIdx(idx) {
-      const item = currentItems[idx];
-      if (!item || !item.value) return;
-      input.value = item.label;
-      closeDropdown();
-      onSelect(item.value, slotIndex);
-    }
-
-    function refresh() {
-      const q = input.value.trim().toLowerCase();
-      const items = getOptions(q);
-      render(items.slice(0, 120));
-      openDropdown();
-    }
-
-    input.addEventListener("focus", refresh);
-    input.addEventListener("input", refresh);
-
-    input.addEventListener("keydown", (e) => {
-      if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-        refresh();
-        return;
-      }
-
-      if (e.key === "Escape") {
-        closeDropdown();
-        return;
-      }
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        highlightedIndex = Math.min(highlightedIndex + 1, currentItems.length - 1);
-        updateHighlight();
-        return;
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        highlightedIndex = Math.max(highlightedIndex - 1, 0);
-        updateHighlight();
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (highlightedIndex >= 0) {
-          e.preventDefault();
-          selectIdx(highlightedIndex);
-        }
-        return;
-      }
-    });
-
-    clear.addEventListener("click", () => {
-      input.value = "";
-      closeDropdown();
-      onClear(slotIndex);
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!wrapper.contains(e.target)) closeDropdown();
-    });
-
-    return {
-      setLabel(label) {
-        input.value = label || "";
-      },
-    };
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -288,7 +126,6 @@
     const distanceBtns = Array.from(document.querySelectorAll(".h2h-distance-btn"));
     const pickerGrid = document.getElementById("h2hPickerGrid");
     const tableBody = document.getElementById("h2hBody");
-    const tableHeadExtra = document.getElementById("h2hExtraHead");
     const tableTitle = document.getElementById("h2hTableTitle");
 
     const data = loadExcelData();
@@ -303,8 +140,8 @@
     const sheets = data.sheets;
 
     let gender = "men";
-    let distance = "500"; // 500, 1000, 1500, relay, mixed
-    const selected = new Array(8).fill(""); // store rider names (as Excel NAME col D)
+    let distance = "500";
+    const selected = new Array(8).fill("");
 
     let riderOptions = []; // {name, land}
     let overallIndex = new Map();
@@ -317,15 +154,12 @@
       const sheet = sheets[overallName];
       const rows = (sheet && sheet.rows) || [];
       const items = rows
-        .map((r) => {
-          return {
-            name: String(r[3] || "").trim(),
-            land: String(r[4] || "").trim(),
-          };
-        })
+        .map((r) => ({
+          name: String(r[3] || "").trim(), // D
+          land: String(r[4] || "").trim(), // E
+        }))
         .filter((x) => x.name);
 
-      // De-dupe by name (keep first land)
       const seen = new Set();
       const unique = [];
       for (const item of items) {
@@ -381,13 +215,54 @@
     }
 
     function updateComboboxes() {
-      // Keep labels in inputs aligned with selected values
       for (let i = 0; i < comboboxes.length; i++) {
         comboboxes[i].setLabel(selected[i] || "");
       }
     }
 
-    function getAvailableOptions(query, slotIndex) {
+    function getOverallRow(name) {
+      return overallIndex.get(normalize(name)) || null;
+    }
+
+    function getDistanceRow(name) {
+      return distanceIndex.get(normalize(name)) || null;
+    }
+
+    // ✅ WT moet kolom A zijn uit het tabblad van de gekozen afstand.
+    function getWTFromDistance(name) {
+      const row = getDistanceRow(name);
+      const wt = row ? row[0] : "";
+      return wt && String(wt).trim() ? String(wt).trim() : "-";
+    }
+
+    function getLand(name) {
+      // Land altijd gevuld: prefer overall (E), fallback distance (E), else "-"
+      const o = getOverallRow(name);
+      const d = getDistanceRow(name);
+      const land = (o && o[4]) || (d && d[4]) || "";
+      return land && String(land).trim() ? String(land).trim() : "-";
+    }
+
+    function getDistanceFields(name) {
+      const row = getDistanceRow(name);
+      if (!row) {
+        return { can1: "-", can2: "-", pol: "-", time: "-" };
+      }
+
+      const can1 = pointsToRank(row[5]); // F
+      const can2 = pointsToRank(row[6]); // G
+      const pol = pointsToRank(row[7]);  // H
+      const timeVal = excelTimeToString(row[10]); // K
+
+      return {
+        can1: can1 !== "" ? String(can1) : "-",
+        can2: can2 !== "" ? String(can2) : "-",
+        pol: pol !== "" ? String(pol) : "-",
+        time: timeVal && String(timeVal).trim() ? String(timeVal).trim() : "-",
+      };
+    }
+
+    function getOptions(query, slotIndex) {
       const q = (query || "").trim().toLowerCase();
 
       const selectedElsewhere = new Set(
@@ -400,56 +275,31 @@
         const key = normalize(opt.name);
         if (selectedElsewhere.has(key)) return false;
         if (!q) return true;
-        return (
-          opt.name.toLowerCase().includes(q) ||
-          (opt.land || "").toLowerCase().includes(q)
-        );
+        const hay = (opt.name + " " + (opt.land || "")).toLowerCase();
+        return hay.includes(q);
       });
 
-      return filtered.map((opt) => ({
-        value: opt.name,
-        label: opt.name,
-        meta: opt.land ? opt.land : "",
-      }));
+      return filtered.map((opt) => {
+        // ✅ label toont nu kolom A uit de gekozen afstand (of "-")
+        const distRank = getWTFromDistance(opt.name);
+        return {
+          value: opt.name,
+          label: distRank + ". " + opt.name,
+          meta: opt.land ? opt.land : "",
+        };
+      });
     }
 
-    function onSelectRider(name, slotIndex) {
+    function onSelect(name, slotIndex) {
       selected[slotIndex] = name;
       renderTable();
-      updateComboboxes();
+      comboboxes[slotIndex].setLabel(name);
     }
 
-    function onClearRider(slotIndex) {
+    function onClear(slotIndex) {
       selected[slotIndex] = "";
       renderTable();
-      updateComboboxes();
-    }
-
-    function getOverallRankForName(name) {
-      const row = overallIndex.get(normalize(name));
-      // Overall ranking is column A => index 0
-      return row ? row[0] || "" : "";
-    }
-
-    function getDistanceDataForName(name) {
-      const row = distanceIndex.get(normalize(name));
-      if (!row) {
-        return {
-          land: "",
-          can1: "",
-          can2: "",
-          pol: "",
-          time: "",
-        };
-      }
-
-      const land = row[4] || ""; // E
-      const can1 = pointsToRank(row[5]); // F
-      const can2 = pointsToRank(row[6]); // G
-      const pol = pointsToRank(row[7]); // H
-      const time = excelTimeToString(row[10]); // K
-
-      return { land, can1, can2, pol, time };
+      comboboxes[slotIndex].setLabel("");
     }
 
     function renderTable() {
@@ -484,8 +334,9 @@
       }
 
       picked.forEach((name) => {
-        const dist = getDistanceDataForName(name);
-        const overallRank = getOverallRankForName(name);
+        const land = getLand(name);
+        const fields = getDistanceFields(name);
+        const wt = getWTFromDistance(name);
 
         const tr = document.createElement("tr");
 
@@ -497,18 +348,167 @@
         }
 
         tr.appendChild(cell(name));
-        tr.appendChild(cell(dist.land, "h2h-col-small"));
-        tr.appendChild(cell(dist.can1, "h2h-col-small"));
-        tr.appendChild(cell(dist.can2, "h2h-col-small"));
-        tr.appendChild(cell(dist.pol, "h2h-col-small"));
-        tr.appendChild(cell(overallRank, "h2h-col-small"));
-        tr.appendChild(cell(dist.time, "h2h-col-time"));
+        tr.appendChild(cell(land, "h2h-col-small"));
+        tr.appendChild(cell(fields.can1, "h2h-col-small"));
+        tr.appendChild(cell(fields.can2, "h2h-col-small"));
+        tr.appendChild(cell(fields.pol, "h2h-col-small"));
+        tr.appendChild(cell(fields.time, "h2h-col-time"));
+        tr.appendChild(cell(wt, "h2h-col-small"));
 
         tableBody.appendChild(tr);
       });
     }
 
-    // Init UI
+    function createCombobox({ mountEl, slotIndex }) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "h2h-combobox";
+
+      const input = document.createElement("input");
+      input.className = "h2h-input";
+      input.type = "text";
+      input.placeholder = "Type om te zoeken…";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "h2h-clear";
+      clear.title = "Leegmaken";
+      clear.textContent = "×";
+
+      const dropdown = document.createElement("div");
+      dropdown.className = "h2h-dropdown";
+
+      wrapper.appendChild(input);
+      wrapper.appendChild(clear);
+      wrapper.appendChild(dropdown);
+      mountEl.appendChild(wrapper);
+
+      let highlightedIndex = -1;
+      let open = false;
+      let currentItems = [];
+
+      function render(items) {
+        dropdown.innerHTML = "";
+        currentItems = items;
+
+        if (!items.length) {
+          const empty = document.createElement("div");
+          empty.className = "h2h-option";
+          empty.textContent = "Geen resultaten";
+          dropdown.appendChild(empty);
+          highlightedIndex = -1;
+          return;
+        }
+
+        items.forEach((item, idx) => {
+          const opt = document.createElement("div");
+          opt.className = "h2h-option";
+          opt.dataset.idx = String(idx);
+          opt.innerHTML = `${item.label} <small>${item.meta || ""}</small>`;
+
+          opt.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            selectIdx(idx);
+          });
+
+          dropdown.appendChild(opt);
+        });
+
+        highlightedIndex = -1;
+      }
+
+      function openDropdown() {
+        if (open) return;
+        open = true;
+        dropdown.classList.add("is-open");
+      }
+
+      function closeDropdown() {
+        open = false;
+        dropdown.classList.remove("is-open");
+        highlightedIndex = -1;
+        updateHighlight();
+      }
+
+      function updateHighlight() {
+        const nodes = Array.from(dropdown.querySelectorAll(".h2h-option"));
+        nodes.forEach((n) => n.classList.remove("is-highlighted"));
+        if (highlightedIndex >= 0 && highlightedIndex < nodes.length) {
+          nodes[highlightedIndex].classList.add("is-highlighted");
+          nodes[highlightedIndex].scrollIntoView({ block: "nearest" });
+        }
+      }
+
+      function selectIdx(idx) {
+        const item = currentItems[idx];
+        if (!item || !item.value) return;
+        input.value = item.value;
+        closeDropdown();
+        onSelect(item.value, slotIndex);
+      }
+
+      function refresh() {
+        const q = input.value.trim().toLowerCase();
+        const items = getOptions(q, slotIndex);
+        render(items.slice(0, 120));
+        openDropdown();
+      }
+
+      input.addEventListener("focus", refresh);
+      input.addEventListener("input", refresh);
+
+      input.addEventListener("keydown", (e) => {
+        if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          refresh();
+          return;
+        }
+
+        if (e.key === "Escape") {
+          closeDropdown();
+          return;
+        }
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          highlightedIndex = Math.min(highlightedIndex + 1, currentItems.length - 1);
+          updateHighlight();
+          return;
+        }
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          highlightedIndex = Math.max(highlightedIndex - 1, 0);
+          updateHighlight();
+          return;
+        }
+
+        if (e.key === "Enter") {
+          if (highlightedIndex >= 0) {
+            e.preventDefault();
+            selectIdx(highlightedIndex);
+          }
+          return;
+        }
+      });
+
+      clear.addEventListener("click", () => {
+        input.value = "";
+        closeDropdown();
+        onClear(slotIndex);
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!wrapper.contains(e.target)) closeDropdown();
+      });
+
+      return {
+        setLabel(label) {
+          input.value = label || "";
+        },
+      };
+    }
+
     genderBtns.forEach((btn) => {
       btn.addEventListener("click", () => setActiveGender(btn.dataset.gender));
     });
@@ -517,7 +517,6 @@
       btn.addEventListener("click", () => setActiveDistance(btn.dataset.distance));
     });
 
-    // Build 8 pickers
     if (pickerGrid) {
       pickerGrid.innerHTML = "";
       for (let i = 0; i < 8; i++) {
@@ -530,24 +529,15 @@
 
         card.appendChild(label);
 
-        const comboMount = document.createElement("div");
-        card.appendChild(comboMount);
+        const mount = document.createElement("div");
+        card.appendChild(mount);
 
         pickerGrid.appendChild(card);
 
-        const combo = createCombobox({
-          mountEl: comboMount,
-          slotIndex: i,
-          getOptions: (q) => getAvailableOptions(q, i),
-          onSelect: onSelectRider,
-          onClear: onClearRider,
-        });
-
-        comboboxes.push(combo);
+        comboboxes.push(createCombobox({ mountEl: mount, slotIndex: i }));
       }
     }
 
-    // Defaults
     setActiveGender("men");
     setActiveDistance("500");
   });
