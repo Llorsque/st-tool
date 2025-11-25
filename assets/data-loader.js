@@ -1,10 +1,11 @@
-
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     const fileInput = document.getElementById("dataFileInput");
     const button = document.getElementById("dataUploadButton");
     const metaEl = document.getElementById("uploadMeta");
-    const STORAGE_KEY = "shorttrack_hub_excel_meta_v1";
+
+    const STORAGE_META_KEY = "shorttrack_hub_excel_meta_v1";
+    const STORAGE_DATA_KEY = "shorttrack_hub_excel_data_v1";
 
     if (!fileInput || !button || !metaEl) return;
 
@@ -35,7 +36,7 @@
 
     // Probeer oude info uit localStorage te lezen
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_META_KEY);
       if (stored) {
         const meta = JSON.parse(stored);
         renderMeta(meta);
@@ -70,7 +71,7 @@
         const arrayBuffer = await file.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
-        const sheets = workbook.SheetNames.map(function (name) {
+        const sheetMeta = workbook.SheetNames.map(function (name) {
           const ws = workbook.Sheets[name];
           let rows = null;
           if (ws && ws["!ref"]) {
@@ -82,18 +83,67 @@
 
         const meta = {
           fileName: file.name,
-          sheetCount: sheets.length,
-          sheets: sheets,
+          sheetCount: sheetMeta.length,
+          sheets: sheetMeta,
           loadedAt: new Date().toLocaleString(),
         };
 
-        // Voor nu slaan we alleen meta-info op.
-        // Later kunnen we hier een vaste structuur afspreken en de echte data
-        // (per sheet) in localStorage zetten zodat modules ermee kunnen werken.
+        // Parsed data: per sheet een array met rijen (objects op basis van headers)
+        const parsed = {
+          version: 1,
+          fileName: file.name,
+          loadedAtISO: new Date().toISOString(),
+          sheets: {},
+        };
+
+        workbook.SheetNames.forEach(function (name) {
+          const ws = workbook.Sheets[name];
+          if (!ws) return;
+
+          // raw:false => pakt de "weergavewaarde" (handig voor leading zeros / opmaak)
+          const rows = XLSX.utils.sheet_to_json(ws, {
+            defval: "",
+            raw: false,
+            blankrows: false,
+          });
+
+          // headers (voor mapping / kolomkeuze)
+          const headerRow = XLSX.utils.sheet_to_json(ws, {
+            header: 1,
+            defval: "",
+            raw: false,
+            blankrows: false,
+          });
+
+          const headers =
+            Array.isArray(headerRow) && Array.isArray(headerRow[0])
+              ? headerRow[0].map(function (h) {
+                  return String(h || "").trim();
+                })
+              : [];
+
+          parsed.sheets[name] = {
+            headers: headers,
+            rows: rows,
+          };
+        });
+
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(meta));
+          localStorage.setItem(STORAGE_META_KEY, JSON.stringify(meta));
         } catch (e) {
           console.warn("Kon Excel-meta niet opslaan in localStorage:", e);
+        }
+
+        // Data kan groter zijn dan localStorage toelaat. Daarom in try/catch met duidelijke melding.
+        try {
+          localStorage.setItem(STORAGE_DATA_KEY, JSON.stringify(parsed));
+        } catch (e) {
+          console.warn("Kon Excel-data niet opslaan in localStorage:", e);
+          // We tonen een hint: bestand mogelijk te groot.
+          metaEl.innerHTML =
+            "<span><strong>Bestand geladen, maar data is te groot om op te slaan in de browser.</strong><br/>" +
+            "<small>Tip: maak je Excel compacter (minder tabs/rijen) of splits per module. Meta-info is wel opgeslagen.</small></span>";
+          return;
         }
 
         renderMeta(meta);
