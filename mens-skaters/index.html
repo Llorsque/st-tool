@@ -1,98 +1,94 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Men's Skaters | Shorttrack Hub</title>
-    <link rel="stylesheet" href="../assets/styles.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <link rel="stylesheet" href="../assets/mens-skaters.css" />
+
     <script defer src="../assets/mens-skaters.js"></script>
   </head>
+
   <body>
     <main class="app-shell">
-      <section class="page-layout">
-        <header class="page-header-line">
+      <section class="ms-layout">
+        <header class="ms-header">
           <div>
             <div class="breadcrumb">
               <a href="../index.html">Shorttrack Hub</a>
               <span>/</span>
               <span>Men's Skaters</span>
             </div>
-            <h1 class="page-title">Men's Skaters</h1>
+            <h1 class="ms-title">World Tour Participants (Men)</h1>
+            <p class="ms-subtitle">
+              Overzicht uit Excel-tabblad <strong>“Men”</strong> met kolommen:
+              <strong>Helm ID</strong>, <strong>Naam</strong> en <strong>Land</strong>.
+              Filters zijn multi-select en hebben een zoekveld.
+            </p>
           </div>
+
           <div class="page-header-actions">
             <a href="../index.html" class="home-button">
               <span>←</span>
               <span>Hoofdmenu</span>
             </a>
-            <div class="page-meta">
-              Tabel vanuit Excel-tabblad <strong>"Men"</strong>.<br />
-              Filter op land en/of rijder (multi-select) + snel zoeken.
-            </div>
           </div>
         </header>
 
-        <div class="notice" id="noDataNotice" hidden>
-          <strong>Geen data gevonden.</strong><br />
-          Ga terug naar het <a href="../index.html">hoofdmenu</a> en upload eerst je Excel-bestand.
-          Daarna kun je hier de lijst met World Tour deelnemers bekijken.
-        </div>
-
-        <section class="data-card" id="dataCard" hidden>
-          <div class="data-card-header">
-            <div>
-              <h2>World Tour Participants (Men)</h2>
-              <p>
-                Exacte rijen worden 1-op-1 overgenomen vanuit jouw Excel-bestand. Als de kolomnamen
-                anders heten dan verwacht, kun je hieronder de juiste mapping kiezen.
-              </p>
+        <section class="ms-controls" aria-label="Filters">
+          <div class="ms-controls-row">
+            <div class="ms-control">
+              <label class="ms-label" for="msSearch">Zoeken</label>
+              <input
+                id="msSearch"
+                class="ms-input"
+                type="search"
+                placeholder="Zoek op Helm ID, naam of land…"
+                autocomplete="off"
+              />
             </div>
-            <div class="data-card-badge" id="sheetBadge">Sheet: Men</div>
+
+            <div class="ms-control">
+              <div class="ms-label">Land</div>
+              <div id="msCountryFilter" class="ms-multi"></div>
+            </div>
+
+            <div class="ms-control">
+              <div class="ms-label">Rijder</div>
+              <div id="msRiderFilter" class="ms-multi"></div>
+            </div>
+
+            <div class="ms-control ms-control-actions">
+              <div class="ms-label">&nbsp;</div>
+              <button id="msReset" class="ms-btn" type="button">Reset filters</button>
+            </div>
           </div>
 
-          <div class="filters-grid">
-            <input
-              id="globalSearch"
-              class="search-input"
-              type="search"
-              placeholder="Zoek op helm-ID, naam of land (type om te filteren)…"
-              autocomplete="off"
-            />
+          <div id="msStatus" class="ms-status"></div>
+        </section>
 
-            <div class="ms" id="countryFilter"></div>
-            <div class="ms" id="skaterFilter"></div>
-          </div>
-
-          <div class="table-wrap" aria-label="Men skaters table">
-            <table class="data-table">
+        <section class="ms-table-section" aria-label="Tabel">
+          <div class="ms-table-wrap">
+            <table class="ms-table" aria-label="Men skaters table">
               <thead>
                 <tr>
-                  <th class="col-helmet">Helm ID</th>
+                  <th class="ms-col-id">Helm ID</th>
                   <th>Naam</th>
-                  <th class="col-nation">Land</th>
+                  <th class="ms-col-country">Land</th>
                 </tr>
               </thead>
-              <tbody id="skaterTableBody"></tbody>
+              <tbody id="msBody"></tbody>
             </table>
-          </div>
-
-          <div class="data-meta-line" id="resultMeta"></div>
-
-          <div class="mapping-grid" aria-label="Kolom mapping">
-            <select class="select" id="mapHelmet"></select>
-            <select class="select" id="mapName"></select>
-            <select class="select" id="mapNation"></select>
-          </div>
-
-          <div class="data-meta-line">
-            <small>
-              Mapping wordt opgeslagen in je browser (localStorage) zodat je dit niet elke keer opnieuw hoeft te doen.
-            </small>
           </div>
         </section>
       </section>

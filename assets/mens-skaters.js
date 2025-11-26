@@ -1,497 +1,338 @@
+
 (function () {
   const DATA_KEY = "shorttrack_hub_excel_data_v1";
-  const MAP_KEY = "shorttrack_hub_men_mapping_v1";
+  const SHEET_NAME = "Men";
 
-  const state = {
-    rawRows: [],
-    headers: [],
-    helmetKey: null,
-    nameKey: null,
-    nationKey: null,
-    globalQuery: "",
-    selectedNations: new Set(),
-    selectedSkaters: new Set(), // store helmet IDs by default
-  };
-
-  function $(id) {
-    return document.getElementById(id);
-  }
-
-  function safeString(value) {
-    if (value === null || value === undefined) return "";
-    return String(value).trim();
-  }
-
-  function detectColumn(headers, candidates) {
-    const lower = headers.map((h) => safeString(h).toLowerCase());
-    for (const cand of candidates) {
-      const idx = lower.findIndex((h) => h === cand || h.includes(cand));
-      if (idx >= 0) return headers[idx];
-    }
-    return null;
-  }
-
-  function readStoredData() {
+  function loadExcelData() {
     try {
       const raw = localStorage.getItem(DATA_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed;
-    } catch (e) {
-      console.warn("Kon data niet lezen:", e);
-      return null;
-    }
-  }
-
-  function readStoredMapping() {
-    try {
-      const raw = localStorage.getItem(MAP_KEY);
-      if (!raw) return null;
       return JSON.parse(raw);
-    } catch {
+    } catch (e) {
+      console.warn("Kon Excel-data niet lezen:", e);
       return null;
     }
   }
 
-  function storeMapping(mapping) {
-    try {
-      localStorage.setItem(MAP_KEY, JSON.stringify(mapping));
-    } catch (e) {
-      console.warn("Kon mapping niet opslaan:", e);
+  function normalize(v) {
+    return String(v ?? "").trim().toLowerCase();
+  }
+
+  function isHeaderRow(row) {
+    if (!row || row.length < 3) return false;
+    const a = normalize(row[0]);
+    const b = normalize(row[1]);
+    const c = normalize(row[2]);
+    const looksLike = (x) => ["helm", "helm id", "helmet", "helmet id", "id"].some((k) => x.includes(k));
+    const looksName = (x) => ["naam", "name", "skater", "rijder"].some((k) => x.includes(k));
+    const looksCountry = (x) => ["land", "country", "nation", "noc"].some((k) => x.includes(k));
+    return looksLike(a) && looksName(b) && looksCountry(c);
+  }
+
+  function extractRows(sheetRows) {
+    const rows = Array.isArray(sheetRows) ? sheetRows : [];
+    if (!rows.length) return [];
+    const startIdx = isHeaderRow(rows[0]) ? 1 : 0;
+
+    const out = [];
+    for (let i = startIdx; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const helmId = String(r[0] ?? "").trim();
+      const name = String(r[1] ?? "").trim();
+      const land = String(r[2] ?? "").trim();
+      if (!helmId && !name && !land) continue;
+      out.push({ helmId, name, land });
     }
+    return out;
   }
 
-  function buildSelect(selectEl, label, headers, currentKey) {
-    selectEl.innerHTML = "";
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = label + " (kies kolom)";
-    selectEl.appendChild(opt0);
+  function createMultiSelect(mountEl, { placeholder, onChange }) {
+    const state = { open: false, query: "", options: [], selected: new Set() };
 
-    headers.forEach((h) => {
-      const opt = document.createElement("option");
-      opt.value = h;
-      opt.textContent = h || "(leeg)";
-      if (currentKey && h === currentKey) opt.selected = true;
-      selectEl.appendChild(opt);
-    });
-  }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ms-multi-btn";
+    btn.setAttribute("aria-haspopup", "listbox");
 
-  // --- Multi-select component ---
-  function createMultiSelect(opts) {
-    const {
-      mount,
-      title,
-      placeholder,
-      items, // array of { value, label }
-      selectedSet,
-      onChange,
-    } = opts;
+    const chipline = document.createElement("div");
+    chipline.className = "ms-chipline";
+    const caret = document.createElement("div");
+    caret.className = "ms-caret";
+    caret.textContent = "▾";
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ms-button";
-    button.setAttribute("aria-haspopup", "listbox");
-    button.setAttribute("aria-expanded", "false");
+    btn.appendChild(chipline);
+    btn.appendChild(caret);
 
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-    left.style.gap = "0.15rem";
+    const panel = document.createElement("div");
+    panel.className = "ms-panel";
+    panel.setAttribute("role", "listbox");
 
-    const strong = document.createElement("strong");
-    strong.textContent = title;
-
-    const summary = document.createElement("span");
-    summary.textContent = placeholder;
-
-    left.appendChild(strong);
-    left.appendChild(summary);
-
-    const chevron = document.createElement("div");
-    chevron.className = "ms-chevron";
-    chevron.textContent = "▾";
-
-    button.appendChild(left);
-    button.appendChild(chevron);
-
-    const popover = document.createElement("div");
-    popover.className = "ms-popover";
-    popover.setAttribute("role", "dialog");
+    const top = document.createElement("div");
+    top.className = "ms-panel-top";
 
     const search = document.createElement("input");
-    search.className = "ms-search";
+    search.className = "ms-panel-search";
     search.type = "search";
     search.placeholder = "Zoek…";
     search.autocomplete = "off";
 
-    const controls = document.createElement("div");
-    controls.className = "ms-controls";
+    const actions = document.createElement("div");
+    actions.className = "ms-panel-actions";
 
     const btnAll = document.createElement("button");
     btnAll.type = "button";
-    btnAll.className = "ms-pillbtn";
+    btnAll.className = "ms-mini";
     btnAll.textContent = "Selecteer alles";
 
     const btnNone = document.createElement("button");
     btnNone.type = "button";
-    btnNone.className = "ms-pillbtn";
+    btnNone.className = "ms-mini";
     btnNone.textContent = "Wis selectie";
 
-    controls.appendChild(btnAll);
-    controls.appendChild(btnNone);
+    actions.appendChild(btnAll);
+    actions.appendChild(btnNone);
 
-    const list = document.createElement("div");
-    list.className = "ms-list";
-    list.setAttribute("role", "listbox");
+    top.appendChild(search);
+    top.appendChild(actions);
 
-    const empty = document.createElement("div");
-    empty.className = "ms-empty";
-    empty.textContent = "Geen resultaten.";
+    const opts = document.createElement("div");
+    opts.className = "ms-options";
 
-    popover.appendChild(search);
-    popover.appendChild(controls);
-    popover.appendChild(list);
+    panel.appendChild(top);
+    panel.appendChild(opts);
 
-    mount.appendChild(button);
-    mount.appendChild(popover);
+    mountEl.appendChild(btn);
+    mountEl.appendChild(panel);
 
-    let filteredItems = items.slice();
-
-    function updateSummary() {
-      const count = selectedSet.size;
-      if (count === 0) {
-        summary.textContent = placeholder;
-        return;
+    function setOpen(next) {
+      state.open = next;
+      panel.classList.toggle("is-open", state.open);
+      if (state.open) {
+        search.focus();
+        renderOptions();
       }
-      if (count === 1) {
-        const onlyVal = Array.from(selectedSet)[0];
-        const found = items.find((i) => i.value === onlyVal);
-        summary.textContent = found ? found.label : "1 geselecteerd";
-        return;
-      }
-      summary.textContent = `${count} geselecteerd`;
     }
 
-    function renderList() {
-      list.innerHTML = "";
-      const q = safeString(search.value).toLowerCase();
-      filteredItems = q
-        ? items.filter((i) => i.label.toLowerCase().includes(q))
-        : items.slice();
+    function renderChips() {
+      chipline.innerHTML = "";
+      const chosen = Array.from(state.selected);
 
-      if (filteredItems.length === 0) {
-        list.appendChild(empty);
+      if (!chosen.length) {
+        const t = document.createElement("div");
+        t.style.color = "rgba(255,255,255,.75)";
+        t.style.fontSize = "14px";
+        t.textContent = placeholder;
+        chipline.appendChild(t);
         return;
       }
 
-      filteredItems.forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "ms-item";
+      const max = 2;
+      chosen.slice(0, max).forEach((v) => {
+        const chip = document.createElement("span");
+        chip.className = "ms-chip";
+        chip.textContent = v;
+        chipline.appendChild(chip);
+      });
 
-        const id = `ms_${title}_${item.value}`.replace(/\s+/g, "_");
+      if (chosen.length > max) {
+        const chip = document.createElement("span");
+        chip.className = "ms-chip";
+        chip.textContent = `+${chosen.length - max}`;
+        chipline.appendChild(chip);
+      }
+    }
+
+    function renderOptions() {
+      const q = normalize(state.query);
+      opts.innerHTML = "";
+      const filtered = state.options.filter((v) => !q || normalize(v).includes(q));
+
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.style.color = "rgba(255,255,255,.72)";
+        empty.style.padding = "10px 8px";
+        empty.textContent = "Geen resultaten";
+        opts.appendChild(empty);
+        return;
+      }
+
+      filtered.forEach((v) => {
+        const row = document.createElement("label");
+        row.className = "ms-option";
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.id = id;
-        cb.checked = selectedSet.has(item.value);
+        cb.checked = state.selected.has(v);
 
-        const label = document.createElement("label");
-        label.setAttribute("for", id);
-        label.textContent = item.label;
-
-        cb.addEventListener("change", () => {
-          if (cb.checked) selectedSet.add(item.value);
-          else selectedSet.delete(item.value);
-          updateSummary();
-          onChange();
-        });
+        const span = document.createElement("span");
+        span.textContent = v;
 
         row.appendChild(cb);
-        row.appendChild(label);
-        list.appendChild(row);
+        row.appendChild(span);
+
+        row.addEventListener("click", (e) => {
+          if (state.selected.has(v)) state.selected.delete(v);
+          else state.selected.add(v);
+          renderChips();
+          renderOptions();
+          onChange(Array.from(state.selected));
+        });
+
+        opts.appendChild(row);
       });
     }
 
-    function open() {
-      popover.classList.add("is-open");
-      button.setAttribute("aria-expanded", "true");
-      search.value = "";
-      renderList();
-      setTimeout(() => search.focus(), 0);
-    }
+    btn.addEventListener("click", () => setOpen(!state.open));
 
-    function close() {
-      popover.classList.remove("is-open");
-      button.setAttribute("aria-expanded", "false");
-    }
-
-    function toggle() {
-      if (popover.classList.contains("is-open")) close();
-      else open();
-    }
-
-    button.addEventListener("click", toggle);
-
-    btnAll.addEventListener("click", () => {
-      items.forEach((i) => selectedSet.add(i.value));
-      updateSummary();
-      renderList();
-      onChange();
+    search.addEventListener("input", () => {
+      state.query = search.value || "";
+      renderOptions();
     });
 
-    btnNone.addEventListener("click", () => {
-      selectedSet.clear();
-      updateSummary();
-      renderList();
-      onChange();
+    btnAll.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const q = normalize(state.query);
+      state.options
+        .filter((v) => !q || normalize(v).includes(q))
+        .forEach((v) => state.selected.add(v));
+      renderChips();
+      renderOptions();
+      onChange(Array.from(state.selected));
     });
 
-    search.addEventListener("input", renderList);
+    btnNone.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.selected.clear();
+      renderChips();
+      renderOptions();
+      onChange([]);
+    });
 
     document.addEventListener("click", (e) => {
-      if (!popover.classList.contains("is-open")) return;
-      if (mount.contains(e.target)) return;
-      close();
+      if (!mountEl.contains(e.target)) setOpen(false);
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && popover.classList.contains("is-open")) {
-        close();
-        button.focus();
-      }
-    });
-
-    updateSummary();
+    renderChips();
 
     return {
-      updateItems(newItems) {
-        while (selectedSet.size && !newItems.some((i) => selectedSet.has(i.value))) {
-          // keep selected, but if items changed drastically this could leave orphan values
-          break;
-        }
-        // Note: we don't overwrite selectedSet here.
-        items.length = 0;
-        newItems.forEach((x) => items.push(x));
-        updateSummary();
-        renderList();
+      setOptions(values) {
+        state.options = Array.from(new Set(values)).filter((x) => String(x).trim() !== "");
+        state.options.sort((a, b) => String(a).localeCompare(String(b)));
+        renderOptions();
       },
-      close,
+      clear() {
+        state.selected.clear();
+        state.query = "";
+        search.value = "";
+        renderChips();
+        renderOptions();
+        onChange([]);
+      },
+      getSelected() {
+        return Array.from(state.selected);
+      },
     };
   }
 
-  function getMappedValue(row, key) {
-    return safeString(row[key]);
-  }
+  document.addEventListener("DOMContentLoaded", () => {
+    const statusEl = document.getElementById("msStatus");
+    const bodyEl = document.getElementById("msBody");
+    const searchEl = document.getElementById("msSearch");
+    const resetEl = document.getElementById("msReset");
 
-  function buildDerivedLists() {
-    // Nations
-    const nationSet = new Set();
-    const skaterItems = [];
-
-    state.rawRows.forEach((row, idx) => {
-      const helmet = getMappedValue(row, state.helmetKey);
-      const name = getMappedValue(row, state.nameKey);
-      const nation = getMappedValue(row, state.nationKey);
-
-      if (nation) nationSet.add(nation);
-
-      // rider selector uses helmet-id as value, label = "Name (ID) · NATION"
-      const labelParts = [];
-      if (name) labelParts.push(name);
-      if (helmet) labelParts.push(`(${helmet})`);
-      const label = labelParts.join(" ") + (nation ? ` · ${nation}` : "");
-      if (helmet || name) {
-        skaterItems.push({ value: helmet || String(idx), label });
-      }
-    });
-
-    const nations = Array.from(nationSet)
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
-
-    const nationItems = nations.map((n) => ({ value: n, label: n }));
-
-    return { nationItems, skaterItems };
-  }
-
-  function rowMatchesFilters(row, skaterIdx) {
-    const helmet = getMappedValue(row, state.helmetKey);
-    const name = getMappedValue(row, state.nameKey);
-    const nation = getMappedValue(row, state.nationKey);
-
-    // Global search
-    const q = safeString(state.globalQuery).toLowerCase();
-    if (q) {
-      const hay = `${helmet} ${name} ${nation}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-
-    // Nation multi-select
-    if (state.selectedNations.size > 0 && !state.selectedNations.has(nation)) return false;
-
-    // Skater multi-select (by helmet-id)
-    if (state.selectedSkaters.size > 0) {
-      const key = helmet || String(skaterIdx);
-      if (!state.selectedSkaters.has(key)) return false;
-    }
-
-    return true;
-  }
-
-  function renderTable() {
-    const tbody = $("skaterTableBody");
-    tbody.innerHTML = "";
-
-    let shown = 0;
-
-    state.rawRows.forEach((row, idx) => {
-      if (!rowMatchesFilters(row, idx)) return;
-
-      const tr = document.createElement("tr");
-
-      const tdHelmet = document.createElement("td");
-      tdHelmet.className = "col-helmet";
-      tdHelmet.textContent = getMappedValue(row, state.helmetKey);
-
-      const tdName = document.createElement("td");
-      tdName.textContent = getMappedValue(row, state.nameKey);
-
-      const tdNation = document.createElement("td");
-      tdNation.className = "col-nation";
-      tdNation.textContent = getMappedValue(row, state.nationKey);
-
-      tr.appendChild(tdHelmet);
-      tr.appendChild(tdName);
-      tr.appendChild(tdNation);
-
-      tbody.appendChild(tr);
-      shown++;
-    });
-
-    const meta = $("resultMeta");
-    meta.innerHTML = `Resultaat: <strong>${shown}</strong> van <strong>${state.rawRows.length}</strong> rijders.`;
-  }
-
-  function init() {
-    const data = readStoredData();
-    const noData = $("noDataNotice");
-    const card = $("dataCard");
-
-    if (!data || !data.sheets || !data.sheets["Men"]) {
-      noData.hidden = false;
-      card.hidden = true;
+    const store = loadExcelData();
+    if (!store?.sheets) {
+      statusEl.textContent = "Geen Excel-data gevonden. Upload eerst je Excel op het hoofdmenu.";
       return;
     }
 
-    noData.hidden = true;
-    card.hidden = false;
+    const direct = store.sheets[SHEET_NAME];
+    const fallbackKey = Object.keys(store.sheets).find((k) => k.toLowerCase() === SHEET_NAME.toLowerCase());
+    const sheet = direct || (fallbackKey ? store.sheets[fallbackKey] : null);
 
-    const sheet = data.sheets["Men"];
-    state.headers = Array.isArray(sheet.headers) ? sheet.headers : [];
-    state.rawRows = Array.isArray(sheet.rows) ? sheet.rows : [];
-
-    // Default mapping (auto detect)
-    const storedMap = readStoredMapping();
-    if (storedMap && storedMap.helmetKey && storedMap.nameKey && storedMap.nationKey) {
-      state.helmetKey = storedMap.helmetKey;
-      state.nameKey = storedMap.nameKey;
-      state.nationKey = storedMap.nationKey;
-    } else {
-      const headers = state.headers.length ? state.headers : Object.keys(state.rawRows[0] || {});
-      state.helmetKey =
-        detectColumn(headers, ["helm", "helmet", "bib", "id"]) || headers[0] || null;
-      state.nameKey =
-        detectColumn(headers, ["naam", "name", "skater"]) || headers[1] || null;
-      state.nationKey =
-        detectColumn(headers, ["land", "nation", "country", "noc"]) || headers[2] || null;
-
-      storeMapping({
-        helmetKey: state.helmetKey,
-        nameKey: state.nameKey,
-        nationKey: state.nationKey,
-      });
+    if (!sheet) {
+      statusEl.textContent = `Tabblad "${SHEET_NAME}" niet gevonden in je Excel.`;
+      return;
     }
 
-    const headerSource = state.headers.length ? state.headers : Object.keys(state.rawRows[0] || {});
+    const sheetName = sheet.name || SHEET_NAME;
+    const rows = extractRows(sheet.rows);
 
-    // Build mapping selects
-    const mapHelmet = $("mapHelmet");
-    const mapName = $("mapName");
-    const mapNation = $("mapNation");
-
-    buildSelect(mapHelmet, "Helm ID", headerSource, state.helmetKey);
-    buildSelect(mapName, "Naam", headerSource, state.nameKey);
-    buildSelect(mapNation, "Land", headerSource, state.nationKey);
-
-    function onMappingChange() {
-      const newHelmet = mapHelmet.value || state.helmetKey;
-      const newName = mapName.value || state.nameKey;
-      const newNation = mapNation.value || state.nationKey;
-
-      state.helmetKey = newHelmet;
-      state.nameKey = newName;
-      state.nationKey = newNation;
-
-      storeMapping({
-        helmetKey: state.helmetKey,
-        nameKey: state.nameKey,
-        nationKey: state.nationKey,
-      });
-
-      // Reset selections (because values could change)
-      state.selectedNations.clear();
-      state.selectedSkaters.clear();
-      state.globalQuery = $("globalSearch").value || "";
-
-      // Rebuild filter items
-      const lists = buildDerivedLists();
-      countryMS.updateItems(lists.nationItems);
-      skaterMS.updateItems(lists.skaterItems);
-
-      renderTable();
-    }
-
-    mapHelmet.addEventListener("change", onMappingChange);
-    mapName.addEventListener("change", onMappingChange);
-    mapNation.addEventListener("change", onMappingChange);
-
-    // Build filters
-    const lists = buildDerivedLists();
-
-    const countryMount = $("countryFilter");
-    const skaterMount = $("skaterFilter");
-
-    const countryItems = lists.nationItems;
-    const skaterItems = lists.skaterItems;
-
-    const countryMS = createMultiSelect({
-      mount: countryMount,
-      title: "Land",
+    const countrySelect = createMultiSelect(document.getElementById("msCountryFilter"), {
       placeholder: "Alle landen",
-      items: countryItems.slice(),
-      selectedSet: state.selectedNations,
-      onChange: renderTable,
+      onChange: (values) => {
+        state.countries = values;
+        render();
+      },
     });
 
-    const skaterMS = createMultiSelect({
-      mount: skaterMount,
-      title: "Rijder",
+    const riderSelect = createMultiSelect(document.getElementById("msRiderFilter"), {
       placeholder: "Alle rijders",
-      items: skaterItems.slice(),
-      selectedSet: state.selectedSkaters,
-      onChange: renderTable,
+      onChange: (values) => {
+        state.riders = values;
+        render();
+      },
     });
 
-    // Search
-    const search = $("globalSearch");
-    search.addEventListener("input", () => {
-      state.globalQuery = search.value || "";
-      renderTable();
+    const state = { query: "", countries: [], riders: [] };
+
+    countrySelect.setOptions(rows.map((r) => r.land).filter(Boolean));
+    riderSelect.setOptions(rows.map((r) => r.name).filter(Boolean));
+
+    function matchesRow(r) {
+      const q = normalize(state.query);
+      const qOk =
+        !q ||
+        normalize(r.helmId).includes(q) ||
+        normalize(r.name).includes(q) ||
+        normalize(r.land).includes(q);
+
+      const countriesOk = !state.countries.length || state.countries.includes(r.land);
+      const ridersOk = !state.riders.length || state.riders.includes(r.name);
+
+      return qOk && countriesOk && ridersOk;
+    }
+
+    function render() {
+      const filtered = rows.filter(matchesRow);
+      bodyEl.innerHTML = "";
+
+      filtered.forEach((r) => {
+        const tr = document.createElement("tr");
+
+        const tdId = document.createElement("td");
+        tdId.textContent = r.helmId || "-";
+        tdId.className = "ms-col-id";
+
+        const tdName = document.createElement("td");
+        tdName.textContent = r.name || "-";
+
+        const tdLand = document.createElement("td");
+        tdLand.textContent = r.land || "-";
+        tdLand.className = "ms-col-country";
+
+        tr.appendChild(tdId);
+        tr.appendChild(tdName);
+        tr.appendChild(tdLand);
+        bodyEl.appendChild(tr);
+      });
+
+      statusEl.textContent = `Sheet: ${sheetName} · Rijen: ${filtered.length} / ${rows.length}`;
+    }
+
+    searchEl.addEventListener("input", () => {
+      state.query = searchEl.value || "";
+      render();
     });
 
-    renderTable();
-  }
+    resetEl.addEventListener("click", () => {
+      state.query = "";
+      searchEl.value = "";
+      countrySelect.clear();
+      riderSelect.clear();
+      render();
+    });
 
-  document.addEventListener("DOMContentLoaded", init);
+    render();
+  });
 })();
