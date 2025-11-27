@@ -7,6 +7,8 @@
   --h2h-accent:#52E8E8;
 }
 
+*{ box-sizing: border-box; }
+
 .h2h-layout{
   max-width: 1220px;
   margin: 0 auto;
@@ -51,7 +53,22 @@
   flex-wrap: wrap;
   gap: 12px;
   align-items:center;
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+
+.h2h-tabs{
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.h2h-savebar{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .h2h-toggle{
@@ -60,6 +77,7 @@
   border: 1px solid rgba(255,255,255,.14);
   border-radius: 999px;
   overflow:hidden;
+  flex: 0 0 auto;
 }
 
 .h2h-toggle button{
@@ -77,12 +95,6 @@
   color: rgba(255,255,255,.95);
 }
 
-.h2h-tabs{
-  display:flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 .h2h-tab{
   border-radius: 999px;
   border: 1px solid rgba(82,232,232,.30);
@@ -91,17 +103,12 @@
   padding: 10px 12px;
   cursor:pointer;
   font-weight: 800;
+  flex: 0 0 auto;
 }
 
 .h2h-tab.is-active{
   background: rgba(82,232,232,.16);
   border-color: rgba(82,232,232,.48);
-}
-
-.h2h-savebar{
-  display:flex;
-  align-items:center;
-  gap: 10px;
 }
 
 .h2h-btn{
@@ -131,10 +138,10 @@
 
 .h2h-heatbar{
   margin-top: 12px;
-  display:flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
   gap: 12px;
-  align-items:center;
+  align-items: center;
 }
 
 .h2h-label{
@@ -142,12 +149,14 @@
   letter-spacing: .10em;
   text-transform: uppercase;
   color: rgba(255,255,255,.75);
+  white-space: nowrap;
 }
 
 .h2h-heatselector{
   display:flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 
 .h2h-heatbtn{
@@ -158,6 +167,8 @@
   padding: 8px 10px;
   cursor:pointer;
   font-weight: 800;
+  min-width: 36px;
+  text-align: center;
 }
 
 .h2h-heatbtn.is-active{
@@ -168,18 +179,24 @@
 .h2h-status{
   color: rgba(255,255,255,.70);
   font-size: 14px;
-  flex: 1 1 auto;
-  min-width: 260px;
+  line-height: 1.2;
+  justify-self: start;
+  min-width: 0;
 }
 
 .h2h-heats-wrap{
   margin-top: 12px;
+  /* voorkomt dat cards buiten de rounded container vallen als de viewport net te smal is */
+  overflow-x: auto;
+  padding-bottom: 6px;
 }
 
 .h2h-heats{
   display:grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  grid-template-columns: repeat(5, minmax(210px, 1fr));
   gap: 10px;
+  align-items: start;
+  min-width: 1120px; /* houdt 5 kolommen netjes uitgelijnd; scrollt als het niet past */
 }
 
 .h2h-heat{
@@ -234,6 +251,7 @@
 
 .h2h-slot input{
   flex: 1 1 auto;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -257,6 +275,7 @@
   line-height: 1;
   padding: 4px 6px;
   border-radius: 10px;
+  flex: 0 0 auto;
 }
 
 .h2h-clear:hover{
@@ -356,8 +375,10 @@
 }
 
 @media (max-width: 1180px){
-  .h2h-heats{ grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+  .h2h-heats{ grid-template-columns: repeat(3, minmax(220px, 1fr)); min-width: 0; }
 }
 @media (max-width: 860px){
-  .h2h-heats{ grid-template-columns: repeat(1, minmax(220px, 1fr)); }
+  .h2h-heats{ grid-template-columns: repeat(1, minmax(220px, 1fr)); min-width: 0; }
+  .h2h-heatbar{ grid-template-columns: 1fr; }
+  .h2h-savebar{ margin-left: 0; }
 }
