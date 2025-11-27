@@ -1,4 +1,3 @@
-
 (function () {
   const DATA_KEY = "shorttrack_hub_excel_data_v1";
 
@@ -21,6 +20,10 @@
 
   function normalize(v) {
     return String(v ?? "").trim().toLowerCase();
+  }
+
+  function stripNonWord(s) {
+    return normalize(s).replace(/[^a-z0-9]+/g, " ").trim();
   }
 
   function pointsToRank(cell) {
@@ -52,7 +55,6 @@
         return isMen ? ["Relay Men", "Relay MEN", "Relay"] : ["Relay Women", "Relay WOMEN", "Relay"];
       }
       if (tabKey === "mixed") {
-        // Prefer gender-neutral tab if present; else try gender-specific
         return ["Mixed Relay", "Mixed relay", "Mixed Relay ", "Mixed"]
           .concat(isMen ? ["Mixed Relay Men", "Mixed MEN"] : ["Mixed Relay Women", "Mixed WOMEN"]);
       }
@@ -63,16 +65,26 @@
     };
 
     if (tab === "overall") return pickExistingSheet(sheets, overallCandidates);
-    return pickExistingSheet(sheets, distanceCandidates(tab));
+    return pickExistingSheet(sheets, tab === "mixed" ? distanceCandidates("mixed") : distanceCandidates(tab));
   }
 
-  function looksLikeHeader(row) {
-    // Detect "RANK" in A and "NAME" in D or "LAND" in E etc.
+  function looksLikeHeader(row, mode) {
     if (!row) return false;
-    const a = normalize(row[0]);
-    const d = normalize(row[3]);
-    const e = normalize(row[4]);
-    const j = normalize(row[9]);
+
+    if (mode === "relay") {
+      const a = stripNonWord(row[0]);
+      const b = stripNonWord(row[1]);
+      const c = stripNonWord(row[2]);
+      const h = stripNonWord(row[7]);
+      const i = stripNonWord(row[8]);
+      return a.includes("rank") && b.includes("name") && (c.includes("land") || c.includes("country") || c.includes("nation"))
+        && h.includes("total") && i.includes("time");
+    }
+
+    const a = stripNonWord(row[0]);
+    const d = stripNonWord(row[3]);
+    const e = stripNonWord(row[4]);
+    const j = stripNonWord(row[9]);
     const hasRank = a.includes("rank");
     const hasName = d.includes("name") || d.includes("naam");
     const hasLand = e.includes("land") || e.includes("country") || e.includes("nation");
@@ -80,23 +92,90 @@
     return hasRank && (hasName || hasLand || hasTotal);
   }
 
-  function extractRows(sheetRows) {
+  function buildHeaderIndexMap(headerRow) {
+    const map = new Map();
+    (headerRow || []).forEach((cell, idx) => {
+      const key = stripNonWord(cell);
+      if (!key) return;
+      if (!map.has(key)) map.set(key, idx);
+    });
+    return map;
+  }
+
+  function getIdx(map, candidates, fallback) {
+    for (const c of candidates) {
+      const hit = map.get(stripNonWord(c));
+      if (typeof hit === "number") return hit;
+    }
+    return fallback;
+  }
+
+  function getCell(row, idx) {
+    if (!row) return "";
+    return idx >= 0 && idx < row.length ? row[idx] : "";
+  }
+
+  function extractRows(sheetRows, mode) {
     const rows = Array.isArray(sheetRows) ? sheetRows : [];
     if (!rows.length) return [];
-    const startIdx = looksLikeHeader(rows[0]) ? 1 : 0;
+
+    const hasHeader = looksLikeHeader(rows[0], mode);
+    const headerMap = hasHeader ? buildHeaderIndexMap(rows[0]) : new Map();
+    const startIdx = hasHeader ? 1 : 0;
+
+    const relayIdx = {
+      rank: getIdx(headerMap, ["rank", "RANK"], 0),
+      name: getIdx(headerMap, ["name", "NAME"], 1),
+      land: getIdx(headerMap, ["land", "LAND", "country"], 2),
+      can1: getIdx(headerMap, ["can 1", "can1", "CAN 1", "CAN1"], 3),
+      can2: getIdx(headerMap, ["can 2", "can2", "CAN 2", "CAN2"], 4),
+      pol:  getIdx(headerMap, ["pol", "POL"], 5),
+      ned:  getIdx(headerMap, ["ned", "NED"], 6),
+      total:getIdx(headerMap, ["total", "TOTAL"], 7),
+      time: getIdx(headerMap, ["time", "TIME"], 8),
+    };
 
     const out = [];
     for (let i = startIdx; i < rows.length; i++) {
       const r = rows[i] || [];
-      const rank = String(r[0] ?? "").trim();     // A
-      const name = String(r[3] ?? "").trim();     // D
-      const land = String(r[4] ?? "").trim();     // E
-      const total = String(r[9] ?? "").trim();    // J
-      const can1 = pointsToRank(r[5]);            // F
-      const can2 = pointsToRank(r[6]);            // G
-      const pol  = pointsToRank(r[7]);            // H
 
-      // Skip fully empty lines
+      if (mode === "relay") {
+        const rank = String(getCell(r, relayIdx.rank) ?? "").trim();
+        const name = String(getCell(r, relayIdx.name) ?? "").trim();
+        const land = String(getCell(r, relayIdx.land) ?? "").trim();
+
+        const can1 = String(getCell(r, relayIdx.can1) ?? "").trim();
+        const can2 = String(getCell(r, relayIdx.can2) ?? "").trim();
+        const pol  = String(getCell(r, relayIdx.pol)  ?? "").trim();
+        const ned  = String(getCell(r, relayIdx.ned)  ?? "").trim();
+
+        const total= String(getCell(r, relayIdx.total)?? "").trim();
+        const time = String(getCell(r, relayIdx.time) ?? "").trim();
+
+        if (!rank && !name && !land && !total && !time) continue;
+
+        out.push({
+          rank: rank || "-",
+          name: name || "-",
+          land: land || "-",
+          can1: can1 || "-",
+          can2: can2 || "-",
+          pol:  pol  || "-",
+          ned:  ned  || "-",
+          total: total || "-",
+          time: time || "-",
+        });
+        continue;
+      }
+
+      const rank = String(r[0] ?? "").trim();
+      const name = String(r[3] ?? "").trim();
+      const land = String(r[4] ?? "").trim();
+      const total = String(r[9] ?? "").trim();
+      const can1 = pointsToRank(r[5]);
+      const can2 = pointsToRank(r[6]);
+      const pol  = pointsToRank(r[7]);
+
       if (!rank && !name && !land && !total) continue;
 
       out.push({
@@ -110,7 +189,6 @@
       });
     }
 
-    // Sort by numeric rank when possible
     out.sort((a, b) => {
       const na = Number(a.rank);
       const nb = Number(b.rank);
@@ -125,7 +203,6 @@
     return out;
   }
 
-  // --- multiselect component (same as other modules) ---
   function createMultiSelect(mountEl, { placeholder, onChange }) {
     const state = { open: false, query: "", options: [], selected: new Set() };
 
@@ -331,6 +408,7 @@
       riders: [],
       rows: [],
       sheetName: null,
+      mode: "normal",
     };
 
     const countrySelect = createMultiSelect(document.getElementById("stCountryFilter"), {
@@ -349,6 +427,10 @@
       },
     });
 
+    function currentMode() {
+      return state.tab === "relay" || state.tab === "mixed" ? "relay" : "normal";
+    }
+
     function buildHeader() {
       const tr = document.createElement("tr");
       const th = (txt, cls) => {
@@ -364,6 +446,16 @@
         tr.appendChild(th("Name"));
         tr.appendChild(th("Land", "st-col-small"));
         tr.appendChild(th("Total", "st-col-small"));
+      } else if (state.mode === "relay") {
+        tr.appendChild(th("Rank", "st-col-small"));
+        tr.appendChild(th("Name"));
+        tr.appendChild(th("Land", "st-col-small"));
+        tr.appendChild(th("CAN 1", "st-col-small"));
+        tr.appendChild(th("CAN 2", "st-col-small"));
+        tr.appendChild(th("POL", "st-col-small"));
+        tr.appendChild(th("NED", "st-col-small"));
+        tr.appendChild(th("Total", "st-col-small"));
+        tr.appendChild(th("Time", "st-col-small"));
       } else {
         tr.appendChild(th("Rank", "st-col-small"));
         tr.appendChild(th("Name"));
@@ -380,19 +472,18 @@
       const sheets = store.sheets;
       const name = sheetNameFor(state.gender, state.tab, sheets);
       state.sheetName = name;
+      state.mode = currentMode();
 
       if (!name || !sheets[name]) {
         state.rows = [];
         return;
       }
 
-      state.rows = extractRows(sheets[name].rows);
+      state.rows = extractRows(sheets[name].rows, state.mode);
 
-      // Refresh filter options for this tab/gender (based on available rows)
       countrySelect.setOptions(state.rows.map((r) => r.land).filter(Boolean));
       riderSelect.setOptions(state.rows.map((r) => r.name).filter(Boolean));
 
-      // Reset selected filters when switching tab/gender to avoid blank results
       state.countries = [];
       state.riders = [];
       countrySelect.clear();
@@ -401,15 +492,9 @@
 
     function matches(r) {
       const q = normalize(state.query);
-      const qOk =
-        !q ||
-        normalize(r.rank).includes(q) ||
-        normalize(r.name).includes(q) ||
-        normalize(r.land).includes(q);
-
+      const qOk = !q || normalize(r.rank).includes(q) || normalize(r.name).includes(q) || normalize(r.land).includes(q);
       const cOk = !state.countries.length || state.countries.includes(r.land);
       const rOk = !state.riders.length || state.riders.includes(r.name);
-
       return qOk && cOk && rOk;
     }
 
@@ -419,25 +504,26 @@
 
       const filtered = state.rows.filter(matches);
 
+      const titleMap = {
+        overall: "World Tour Classification",
+        500: "500m",
+        1000: "1000m",
+        1500: "1500m",
+        relay: "Relay",
+        mixed: "Mixed Relay",
+      };
+      const g = state.gender === "men" ? "Men" : "Women";
+
       if (!state.sheetName) {
         statusEl.textContent = "Sheet niet gevonden voor deze selectie. Controleer tabbladnamen in Excel.";
       } else {
-        const titleMap = {
-          overall: "World Tour Classification",
-          500: "500m",
-          1000: "1000m",
-          1500: "1500m",
-          relay: "Relay",
-          mixed: "Mixed Relay",
-        };
-        const g = state.gender === "men" ? "Men" : "Women";
         statusEl.textContent = `${g} · ${titleMap[state.tab]} · Sheet: ${state.sheetName} · Rijen: ${filtered.length} / ${state.rows.length}`;
       }
 
       if (!filtered.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = state.tab === "overall" ? 4 : 7;
+        td.colSpan = state.tab === "overall" ? 4 : (state.mode === "relay" ? 9 : 7);
         td.style.color = "rgba(255,255,255,.72)";
         td.style.padding = "14px 12px";
         td.textContent = "Geen resultaten (pas filters aan).";
@@ -460,6 +546,16 @@
           tr.appendChild(td(r.name));
           tr.appendChild(td(r.land, "st-col-small"));
           tr.appendChild(td(r.total, "st-col-small"));
+        } else if (state.mode === "relay") {
+          tr.appendChild(td(r.rank, "st-col-small"));
+          tr.appendChild(td(r.name));
+          tr.appendChild(td(r.land, "st-col-small"));
+          tr.appendChild(td(r.can1, "st-col-small"));
+          tr.appendChild(td(r.can2, "st-col-small"));
+          tr.appendChild(td(r.pol, "st-col-small"));
+          tr.appendChild(td(r.ned, "st-col-small"));
+          tr.appendChild(td(r.total, "st-col-small"));
+          tr.appendChild(td(r.time, "st-col-small"));
         } else {
           tr.appendChild(td(r.rank, "st-col-small"));
           tr.appendChild(td(r.name));
@@ -506,7 +602,6 @@
       render();
     });
 
-    // initial
     resolveSheetAndRows();
     render();
   });
