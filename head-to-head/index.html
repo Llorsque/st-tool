@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="nl">
   <head>
@@ -46,12 +47,12 @@
         <section class="h2h-controls" aria-label="Controls">
           <div class="h2h-controls-top">
             <div class="h2h-toggle" role="group" aria-label="Men or Women">
-              <button type="button" class="h2h-gender" data-gender="men">Men</button>
+              <button type="button" class="h2h-gender is-active" data-gender="men">Men</button>
               <button type="button" class="h2h-gender" data-gender="women">Women</button>
             </div>
 
             <div class="h2h-tabs" role="tablist" aria-label="Afstanden">
-              <button type="button" class="h2h-tab" data-dist="500">500m</button>
+              <button type="button" class="h2h-tab is-active" data-dist="500">500m</button>
               <button type="button" class="h2h-tab" data-dist="1000">1000m</button>
               <button type="button" class="h2h-tab" data-dist="1500">1500m</button>
               <button type="button" class="h2h-tab" data-dist="relay">Relay</button>
@@ -67,6 +68,7 @@
           <div class="h2h-heatbar">
             <div class="h2h-label">Vergelijk Rit</div>
             <div id="h2hHeatSelector" class="h2h-heatselector" role="group" aria-label="Ritten"></div>
+            <button id="h2hClearHeat" class="h2h-btn h2h-btn-ghost" type="button">Wis rit</button>
             <div id="h2hStatus" class="h2h-status"></div>
           </div>
 
@@ -97,7 +99,6 @@
           <div id="h2hFooter" class="h2h-footer"></div>
         </section>
 
-        <!-- Single floating suggestion panel, anchored to active input -->
         <div id="h2hSuggest" class="h2h-suggest" aria-label="Suggestions"></div>
       </section>
     </main>

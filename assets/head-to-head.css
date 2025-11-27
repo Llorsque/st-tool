@@ -1,3 +1,4 @@
+
 :root{
   --h2h-border: rgba(82,232,232,.25);
   --h2h-text: rgba(255,255,255,.92);
@@ -117,6 +118,11 @@
 .h2h-btn:hover{ background: rgba(82,232,232,.16); }
 .h2h-btn:active{ transform: translateY(1px); }
 
+.h2h-btn-ghost{
+  border-color: rgba(255,255,255,.25);
+  background: rgba(255,255,255,.06);
+}
+
 .h2h-savestate{
   color: rgba(255,255,255,.70);
   font-size: 13px;
@@ -166,12 +172,13 @@
   min-width: 260px;
 }
 
-.h2h-heats-wrap{ margin-top: 12px; }
+.h2h-heats-wrap{
+  margin-top: 12px;
+}
 
-/* 5 ritten naast elkaar, compact (zoals cards). */
 .h2h-heats{
   display:grid;
-  grid-template-columns: repeat(5, minmax(210px, 1fr));
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -203,7 +210,6 @@
   color: rgba(255,255,255,.65);
 }
 
-/* 7 input-vakken onder elkaar */
 .h2h-slots{
   display:flex;
   flex-direction: column;
@@ -234,7 +240,6 @@
   color: rgba(255,255,255,.92);
   font-weight: 800;
   letter-spacing: .01em;
-  min-width: 0;
 }
 
 .h2h-slot input::placeholder{
@@ -309,7 +314,6 @@
   font-size: 13px;
 }
 
-/* Floating suggestions */
 .h2h-suggest{
   position: absolute;
   left: 0;
@@ -340,7 +344,9 @@
   cursor: not-allowed;
 }
 
-.h2h-suggest-main{ font-weight: 900; }
+.h2h-suggest-main{
+  font-weight: 900;
+}
 
 .h2h-suggest-sub{
   margin-top: 2px;
@@ -350,8 +356,8 @@
 }
 
 @media (max-width: 1180px){
-  .h2h-heats{ grid-template-columns: repeat(3, minmax(210px, 1fr)); }
+  .h2h-heats{ grid-template-columns: repeat(3, minmax(220px, 1fr)); }
 }
 @media (max-width: 860px){
-  .h2h-heats{ grid-template-columns: repeat(1, minmax(210px, 1fr)); }
+  .h2h-heats{ grid-template-columns: repeat(1, minmax(220px, 1fr)); }
 }

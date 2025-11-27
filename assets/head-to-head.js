@@ -1,3 +1,4 @@
+
 (function () {
   const DATA_KEY = "shorttrack_hub_excel_data_v1";
   const STORAGE_KEY = "shorttrack_h2h_state_v2";
@@ -67,14 +68,9 @@
   function sheetNameForDistance(gender, dist, sheets) {
     const isMen = gender === "men";
     if (dist === "relay") {
-      // Relay depends on Men/Women slider
-      return pickExistingSheet(
-        sheets,
-        isMen ? ["Relay Men", "Relay MEN", "Relay"] : ["Relay Women", "Relay WOMEN", "Relay"]
-      );
+      return pickExistingSheet(sheets, isMen ? ["Relay Men", "Relay MEN", "Relay"] : ["Relay Women", "Relay WOMEN", "Relay"]);
     }
     if (dist === "mixed") {
-      // Mixed Relay ignores slider
       return pickExistingSheet(sheets, ["Mixed Relay", "Mixed relay", "Mixed Relay ", "Mixed"]);
     }
     if (dist === "500") {
@@ -101,13 +97,8 @@
     const c = stripNonWord(row[2]);
     const h = stripNonWord(row[7]);
     const i = stripNonWord(row[8]);
-    return (
-      a.includes("rank") &&
-      b.includes("name") &&
-      (c.includes("land") || c.includes("country") || c.includes("nation")) &&
-      h.includes("total") &&
-      i.includes("time")
-    );
+    return a.includes("rank") && b.includes("name") && (c.includes("land") || c.includes("country") || c.includes("nation"))
+      && h.includes("total") && i.includes("time");
   }
 
   function looksLikeNormalHeader(row) {
@@ -151,14 +142,13 @@
     const headerMap = hasHeader ? buildHeaderIndexMap(rows[0]) : new Map();
     const startIdx = hasHeader ? 1 : 0;
 
-    // Relay headers (A..I): RANK NAME LAND CAN 1 CAN 2 POL NED TOTAL TIME
     const relayIdx = {
       rank: getIdx(headerMap, ["rank", "RANK"], 0),
       name: getIdx(headerMap, ["name", "NAME"], 1),
       land: getIdx(headerMap, ["land", "LAND", "country"], 2),
       can1: getIdx(headerMap, ["can 1", "can1", "CAN 1", "CAN1"], 3),
       can2: getIdx(headerMap, ["can 2", "can2", "CAN 2", "CAN2"], 4),
-      pol: getIdx(headerMap, ["pol", "POL"], 5),
+      pol:  getIdx(headerMap, ["pol", "POL"], 5),
       time: getIdx(headerMap, ["time", "TIME"], 8),
     };
 
@@ -171,19 +161,18 @@
         const land = String(getCell(r, relayIdx.land) ?? "").trim();
         const can1 = pointsToRankMaybe(getCell(r, relayIdx.can1));
         const can2 = pointsToRankMaybe(getCell(r, relayIdx.can2));
-        const pol = pointsToRankMaybe(getCell(r, relayIdx.pol));
+        const pol  = pointsToRankMaybe(getCell(r, relayIdx.pol));
         const time = String(getCell(r, relayIdx.time) ?? "").trim();
         if (!rank && !name && !land && !time) continue;
         out.push({ rank, name, land, can1, can2, pol, time });
       } else {
-        // Normal sheets: A rank, D name, E land, F/G/H points-ish for CAN1/CAN2/POL, K time
-        const rank = String(r[0] ?? "").trim(); // A
-        const name = String(r[3] ?? "").trim(); // D
-        const land = String(r[4] ?? "").trim(); // E
-        const can1 = pointsToRankMaybe(r[5]); // F
-        const can2 = pointsToRankMaybe(r[6]); // G
-        const pol = pointsToRankMaybe(r[7]); // H
-        const time = String(r[10] ?? "").trim(); // K
+        const rank = String(r[0] ?? "").trim();
+        const name = String(r[3] ?? "").trim();
+        const land = String(r[4] ?? "").trim();
+        const can1 = pointsToRankMaybe(r[5]);
+        const can2 = pointsToRankMaybe(r[6]);
+        const pol  = pointsToRankMaybe(r[7]);
+        const time = String(r[10] ?? "").trim();
         if (!rank && !name && !land && !time) continue;
         out.push({ rank, name, land, can1, can2, pol, time });
       }
@@ -192,7 +181,6 @@
   }
 
   function parseOverallMap(sheetRows) {
-    // Overall sheets: A rank, D name, E land
     const rows = Array.isArray(sheetRows) ? sheetRows : [];
     if (!rows.length) return { byName: new Map(), byLand: new Map() };
 
@@ -201,7 +189,6 @@
 
     const byName = new Map();
     const byLand = new Map();
-
     for (let i = startIdx; i < rows.length; i++) {
       const r = rows[i] || [];
       const rank = String(r[0] ?? "").trim();
@@ -210,7 +197,6 @@
       if (name) byName.set(normalize(name), rank);
       if (land) byLand.set(normalize(land), rank);
     }
-
     return { byName, byLand };
   }
 
@@ -222,6 +208,7 @@
     const excel = loadExcelData();
     const statusEl = document.getElementById("h2hStatus");
     const saveBtn = document.getElementById("h2hSave");
+    const clearHeatBtn = document.getElementById("h2hClearHeat");
     const saveStateEl = document.getElementById("h2hSaveState");
     const footerEl = document.getElementById("h2hFooter");
     const suggestEl = document.getElementById("h2hSuggest");
@@ -250,6 +237,7 @@
       sheetName: null,
       overallSheetName: null,
       activeInput: null,
+      dirty: false,
     };
 
     function markSaved(msg) {
@@ -261,7 +249,7 @@
       }, 1200);
     }
 
-    function persistNow() {
+    function saveNow() {
       savePersisted({
         gender: state.gender,
         dist: state.dist,
@@ -269,49 +257,56 @@
         heats: state.heats,
         savedAt: Date.now(),
       });
+      state.dirty = false;
       markSaved("Opgeslagen ✓");
     }
 
-    function scheduleAutosave() {
+    function markDirty() {
+      state.dirty = true;
       saveStateEl.textContent = "Wijzigingen…";
       saveStateEl.style.opacity = "1";
-      clearTimeout(scheduleAutosave._t);
-      scheduleAutosave._t = setTimeout(() => {
-        persistNow();
+      clearTimeout(markDirty._t);
+      markDirty._t = setTimeout(() => {
+        saveNow();
       }, 350);
-    }
-
-    function isRelayMode() {
-      return state.dist === "relay" || state.dist === "mixed";
     }
 
     function setGender(next) {
       state.gender = next;
       genderBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.gender === next));
       rebuildData();
-      scheduleAutosave();
+      markDirty();
     }
 
     function setDist(next) {
       state.dist = next;
       distBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.dist === next));
       rebuildData();
-      scheduleAutosave();
+      markDirty();
     }
 
     function setActiveHeat(idx) {
       state.activeHeat = idx;
       renderHeatSelector();
       renderTable();
-      scheduleAutosave();
+      markDirty();
+    }
+
+    function clearActiveHeat() {
+      state.heats[state.activeHeat] = Array.from({ length: SLOTS }, () => null);
+      markDirty();
+      renderHeats();
+      renderTable();
+      closeSuggestions();
+    }
+
+    function isRelayMode() {
+      return state.dist === "relay" || state.dist === "mixed";
     }
 
     function rebuildData() {
       const sheets = excel.sheets;
 
-      // Data source rules:
-      // - Relay uses Relay Men/Women depending on slider
-      // - Mixed Relay uses Mixed Relay regardless of slider
       const distSheet = sheetNameForDistance(state.gender, state.dist, sheets);
       state.sheetName = distSheet;
 
@@ -319,9 +314,8 @@
         ? parseDistanceRows(sheets[distSheet].rows, isRelayMode() ? "relay" : "normal")
         : [];
 
-      // Options come from the ACTIVE distance sheet (relay/mixed = teams/countries)
       const seen = new Set();
-      const options = [];
+      state.options = [];
       for (const r of state.rows) {
         const name = String(r.name || "").trim();
         const land = String(r.land || "").trim();
@@ -329,14 +323,10 @@
         const key = normalize(name) + "|" + normalize(land);
         if (seen.has(key)) continue;
         seen.add(key);
-        options.push({ name, land });
+        state.options.push({ name, land });
       }
-      options.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-      state.options = options;
+      state.options.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-      // Overall map:
-      // - For mixed relay slider doesn't matter; we default overall lookup to Overall Men.
-      // - Otherwise: gender-specific.
       const overallGender = state.dist === "mixed" ? "men" : state.gender;
       const overallSheet = sheetNameForOverall(overallGender, sheets);
       state.overallSheetName = overallSheet;
@@ -386,7 +376,7 @@
     function setSlot(heatIdx, slotIdx, objOrNull) {
       if (!state.heats[heatIdx]) state.heats[heatIdx] = Array.from({ length: SLOTS }, () => null);
       state.heats[heatIdx][slotIdx] = objOrNull;
-      scheduleAutosave();
+      markDirty();
       renderHeats();
       renderTable();
     }
@@ -394,6 +384,96 @@
     function clearSlot(heatIdx, slotIdx) {
       setSlot(heatIdx, slotIdx, null);
       closeSuggestions();
+    }
+
+    function renderHeats() {
+      renderHeatSelector();
+
+      heatsEl.innerHTML = "";
+      for (let h = 0; h < HEATS; h++) {
+        const card = document.createElement("div");
+        card.className = "h2h-heat";
+
+        const head = document.createElement("div");
+        head.className = "h2h-heathead";
+
+        const title = document.createElement("div");
+        title.className = "h2h-heattitle";
+        title.textContent = `Rit ${h + 1}`;
+
+        const filled = (state.heats[h] || []).filter(Boolean).length;
+        const meta = document.createElement("div");
+        meta.className = "h2h-heatmeta";
+        meta.textContent = `${filled}/${SLOTS}`;
+
+        head.appendChild(title);
+        head.appendChild(meta);
+
+        const slots = document.createElement("div");
+        slots.className = "h2h-slots";
+
+        for (let s = 0; s < SLOTS; s++) {
+          const wrap = document.createElement("div");
+          wrap.className = "h2h-slot";
+          wrap.dataset.heat = String(h);
+          wrap.dataset.slot = String(s);
+
+          const input = document.createElement("input");
+          input.type = "search";
+          input.placeholder = "Type om te zoeken…";
+          input.autocomplete = "off";
+          input.value = slotValue(h, s);
+
+          const clear = document.createElement("button");
+          clear.type = "button";
+          clear.className = "h2h-clear";
+          clear.textContent = "×";
+          clear.title = "Wissen";
+          clear.style.visibility = (slotValue(h, s) ? "visible" : "hidden");
+
+          clear.addEventListener("click", (e) => {
+            e.stopPropagation();
+            clearSlot(h, s);
+          });
+
+          input.addEventListener("focus", () => {
+            setActiveInput(h, s, input, wrap);
+            showSuggestionsForActiveInput();
+          });
+
+          input.addEventListener("input", () => {
+            setActiveInput(h, s, input, wrap);
+            showSuggestionsForActiveInput();
+          });
+
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+              closeSuggestions();
+              input.blur();
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const first = suggestEl.querySelector(".h2h-suggest-item:not(.is-disabled)");
+              if (first) first.click();
+            }
+          });
+
+          wrap.appendChild(input);
+          wrap.appendChild(clear);
+
+          if (h === state.activeHeat) {
+            wrap.style.borderColor = "rgba(82,232,232,.25)";
+          } else {
+            wrap.style.borderColor = "rgba(255,255,255,.14)";
+          }
+
+          slots.appendChild(wrap);
+        }
+
+        card.appendChild(head);
+        card.appendChild(slots);
+        heatsEl.appendChild(card);
+      }
     }
 
     function setActiveInput(heatIndex, slotIndex, inputEl, wrapEl) {
@@ -496,92 +576,6 @@
       suggestEl.classList.add("is-open");
     }
 
-    function renderHeats() {
-      renderHeatSelector();
-
-      heatsEl.innerHTML = "";
-      for (let h = 0; h < HEATS; h++) {
-        const card = document.createElement("div");
-        card.className = "h2h-heat";
-
-        const head = document.createElement("div");
-        head.className = "h2h-heathead";
-
-        const title = document.createElement("div");
-        title.className = "h2h-heattitle";
-        title.textContent = `Rit ${h + 1}`;
-
-        const filled = (state.heats[h] || []).filter(Boolean).length;
-        const meta = document.createElement("div");
-        meta.className = "h2h-heatmeta";
-        meta.textContent = `${filled}/${SLOTS}`;
-
-        head.appendChild(title);
-        head.appendChild(meta);
-
-        const slots = document.createElement("div");
-        slots.className = "h2h-slots";
-
-        for (let s = 0; s < SLOTS; s++) {
-          const wrap = document.createElement("div");
-          wrap.className = "h2h-slot";
-
-          const input = document.createElement("input");
-          input.type = "search";
-          input.placeholder = "Type om te zoeken…";
-          input.autocomplete = "off";
-          input.value = slotValue(h, s);
-
-          const clear = document.createElement("button");
-          clear.type = "button";
-          clear.className = "h2h-clear";
-          clear.textContent = "×";
-          clear.title = "Wissen";
-          clear.style.visibility = input.value ? "visible" : "hidden";
-
-          clear.addEventListener("click", (e) => {
-            e.stopPropagation();
-            clearSlot(h, s);
-          });
-
-          input.addEventListener("focus", () => {
-            setActiveInput(h, s, input, wrap);
-            showSuggestionsForActiveInput();
-          });
-
-          input.addEventListener("input", () => {
-            clear.style.visibility = input.value ? "visible" : "hidden";
-            setActiveInput(h, s, input, wrap);
-            showSuggestionsForActiveInput();
-            // If user manually edits text, keep selection but do not set land.
-            // We only set full object on click/enter from suggestions.
-            if (!input.value) setSlot(h, s, null);
-            else scheduleAutosave();
-          });
-
-          input.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") {
-              closeSuggestions();
-              input.blur();
-            }
-            if (e.key === "Enter") {
-              e.preventDefault();
-              const first = suggestEl.querySelector(".h2h-suggest-item:not(.is-disabled)");
-              if (first) first.click();
-            }
-          });
-
-          wrap.appendChild(input);
-          wrap.appendChild(clear);
-          slots.appendChild(wrap);
-        }
-
-        card.appendChild(head);
-        card.appendChild(slots);
-        heatsEl.appendChild(card);
-      }
-    }
-
     function findDistanceRowByName(name, land) {
       const nameKey = normalize(name);
       const landKey = normalize(land);
@@ -602,8 +596,8 @@
       const outLand = (row?.land || land || "-").trim() || "-";
       const can1 = row?.can1 ? String(row.can1).trim() : "-";
       const can2 = row?.can2 ? String(row.can2).trim() : "-";
-      const pol = row?.pol ? String(row.pol).trim() : "-";
-      const wt = row?.rank ? String(row.rank).trim() : "-";
+      const pol  = row?.pol  ? String(row.pol).trim() : "-";
+      const wt   = row?.rank ? String(row.rank).trim() : "-";
       const time = row?.time ? String(row.time).trim() : "-";
 
       const nameKey = normalize(name);
@@ -617,13 +611,7 @@
 
     function renderTable() {
       bodyEl.innerHTML = "";
-
-      const rawSelections = state.heats[state.activeHeat] || [];
-      // Only include entries that are objects with a name (ignore raw typed text not selected)
-      const selections = rawSelections
-        .filter(Boolean)
-        .map((v) => (typeof v === "string" ? { name: v, land: "" } : v))
-        .filter((v) => String(v.name || "").trim().length > 0);
+      const selections = (state.heats[state.activeHeat] || []).filter(Boolean);
 
       if (!selections.length) {
         const tr = document.createElement("tr");
@@ -656,17 +644,13 @@
       });
     }
 
-    // Wiring
     genderBtns.forEach((btn) => btn.addEventListener("click", () => setGender(btn.dataset.gender)));
     distBtns.forEach((btn) => btn.addEventListener("click", () => setDist(btn.dataset.dist)));
+    clearHeatBtn.addEventListener("click", clearActiveHeat);
 
-    window.addEventListener(
-      "scroll",
-      () => {
-        if (suggestEl.classList.contains("is-open")) positionSuggestPanel();
-      },
-      { passive: true }
-    );
+    window.addEventListener("scroll", () => {
+      if (suggestEl.classList.contains("is-open")) positionSuggestPanel();
+    }, { passive: true });
 
     window.addEventListener("resize", () => {
       if (suggestEl.classList.contains("is-open")) positionSuggestPanel();
@@ -679,14 +663,12 @@
     });
 
     saveBtn.addEventListener("click", () => {
-      persistNow();
+      saveNow();
     });
 
-    // Init: mark active buttons
     genderBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.gender === state.gender));
     distBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.dist === state.dist));
 
-    // Ensure heats shape
     if (!Array.isArray(state.heats) || state.heats.length !== HEATS) state.heats = emptyHeats();
     for (let h = 0; h < HEATS; h++) {
       if (!Array.isArray(state.heats[h]) || state.heats[h].length !== SLOTS) {
@@ -700,10 +682,8 @@
     }
     state.activeHeat = Math.max(0, Math.min(HEATS - 1, Number(state.activeHeat) || 0));
 
-    // Render
     renderHeatSelector();
     rebuildData();
-    // Persist once to ensure state exists in storage
-    persistNow();
+    saveNow();
   });
 })();
