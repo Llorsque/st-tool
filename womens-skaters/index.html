@@ -1,51 +1,96 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Women's Skaters | Shorttrack Hub</title>
-    <link rel="stylesheet" href="../assets/styles.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <link rel="stylesheet" href="../assets/womens-skaters.css" />
+
+    <script defer src="../assets/womens-skaters.js"></script>
   </head>
+
   <body>
     <main class="app-shell">
-      <section class="page-layout">
-        <header class="page-header-line">
+      <section class="ws-layout">
+        <header class="ws-header">
           <div>
             <div class="breadcrumb">
               <a href="../index.html">Shorttrack Hub</a>
               <span>/</span>
               <span>Women's Skaters</span>
             </div>
-            <h1 class="page-title">Women's Skaters</h1>
+            <h1 class="ws-title">World Tour Participants (Women)</h1>
+            <p class="ws-subtitle">
+              Overzicht uit Excel-tabblad <strong>“Women”</strong> met kolommen:
+              <strong>Helm ID</strong>, <strong>Naam</strong> en <strong>Land</strong>.
+              Filters zijn multi-select en hebben een zoekveld.
+            </p>
           </div>
+
           <div class="page-header-actions">
             <a href="../index.html" class="home-button">
               <span>←</span>
               <span>Hoofdmenu</span>
             </a>
-            <div class="page-meta">
-              Placeholderpagina voor <strong>Women's Skaters</strong>.<br />
-              Later vullen we deze met tabellen, statistieken en filters.
-            </div>
           </div>
         </header>
 
-        <div class="page-placeholder">
-          <p>
-            Dit is de module <strong>Women's Skaters</strong>. Hier kun je straks zelf de data en
-            tabellen toevoegen die je via GitHub beheert.
-          </p>
-          <p>
-            Voor nu is dit een eenvoudige placeholder. Als je wilt, kunnen we per module
-            verder uitwerken welke kolommen, filters en visualisaties je nodig hebt.
-          </p>
-        </div>
+        <section class="ws-controls" aria-label="Filters">
+          <div class="ws-controls-row">
+            <div class="ws-control">
+              <label class="ws-label" for="wsSearch">Zoeken</label>
+              <input
+                id="wsSearch"
+                class="ws-input"
+                type="search"
+                placeholder="Zoek op Helm ID, naam of land…"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="ws-control">
+              <div class="ws-label">Land</div>
+              <div id="wsCountryFilter" class="ws-multi"></div>
+            </div>
+
+            <div class="ws-control">
+              <div class="ws-label">Rijder</div>
+              <div id="wsRiderFilter" class="ws-multi"></div>
+            </div>
+
+            <div class="ws-control ws-control-actions">
+              <div class="ws-label">&nbsp;</div>
+              <button id="wsReset" class="ws-btn" type="button">Reset filters</button>
+            </div>
+          </div>
+
+          <div id="wsStatus" class="ws-status"></div>
+        </section>
+
+        <section class="ws-table-section" aria-label="Tabel">
+          <div class="ws-table-wrap">
+            <table class="ws-table" aria-label="Women skaters table">
+              <thead>
+                <tr>
+                  <th class="ws-col-id">Helm ID</th>
+                  <th>Naam</th>
+                  <th class="ws-col-country">Land</th>
+                </tr>
+              </thead>
+              <tbody id="wsBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
   </body>

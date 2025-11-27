@@ -1,35 +1,41 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Standings | Shorttrack Hub</title>
-    <link rel="stylesheet" href="../assets/styles.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <link rel="stylesheet" href="../assets/standings.css" />
+
     <script defer src="../assets/standings.js"></script>
   </head>
+
   <body>
     <main class="app-shell">
-      <section class="standings-layout">
-        <header class="standings-header-line">
+      <section class="st-layout">
+        <header class="st-header">
           <div>
             <div class="breadcrumb">
               <a href="../index.html">Shorttrack Hub</a>
               <span>/</span>
               <span>Standings</span>
             </div>
-            <h1 class="standings-title">Standings</h1>
-            <p class="standings-meta">
-              Overall World Tour Classification en per afstand voor mannen, op basis van je
-              geüploade Excel-bestand.
+            <h1 class="st-title">Standings</h1>
+            <p class="st-subtitle">
+              <strong>Overall</strong> toont de World Tour Classification. Kies <strong>Men</strong> of <strong>Women</strong>,
+              selecteer een afstand, en filter met multi-select dropdowns + zoekveld.
             </p>
           </div>
+
           <div class="page-header-actions">
             <a href="../index.html" class="home-button">
               <span>←</span>
@@ -38,226 +44,55 @@
           </div>
         </header>
 
-        <section class="standings-controls" aria-label="Tabs en filters voor standings">
-          <div class="standings-tabs" role="tablist" aria-label="Standings men tabs">
-            <button
-              class="standings-tab is-active"
-              type="button"
-              data-tab="overall-men"
-              role="tab"
-              aria-selected="true"
-            >
-              Overall Men
-            </button>
-            <button
-              class="standings-tab"
-              type="button"
-              data-tab="500-men"
-              role="tab"
-              aria-selected="false"
-            >
-              500 Men
-            </button>
-            <button
-              class="standings-tab"
-              type="button"
-              data-tab="1000-men"
-              role="tab"
-              aria-selected="false"
-            >
-              1000 Men
-            </button>
-            <button
-              class="standings-tab"
-              type="button"
-              data-tab="1500-men"
-              role="tab"
-              aria-selected="false"
-            >
-              1500 Men
-            </button>
-            <button
-              class="standings-tab"
-              type="button"
-              data-tab="relay-men"
-              role="tab"
-              aria-selected="false"
-            >
-              Relay Men
-            </button>
+        <section class="st-controls" aria-label="Controls">
+          <div class="st-toprow">
+            <div class="st-toggle" role="group" aria-label="Men or Women">
+              <button type="button" class="st-gender is-active" data-gender="men">Men</button>
+              <button type="button" class="st-gender" data-gender="women">Women</button>
+            </div>
+
+            <div class="st-tabs" role="tablist" aria-label="Afstanden">
+              <button type="button" class="st-tab is-active" data-tab="overall">Overall</button>
+              <button type="button" class="st-tab" data-tab="500">500m</button>
+              <button type="button" class="st-tab" data-tab="1000">1000m</button>
+              <button type="button" class="st-tab" data-tab="1500">1500m</button>
+              <button type="button" class="st-tab" data-tab="relay">Relay</button>
+              <button type="button" class="st-tab" data-tab="mixed">Mixed Relay</button>
+            </div>
           </div>
 
-          <div class="standings-filters">
-            <input
-              id="standingsSearch"
-              class="standings-search"
-              type="text"
-              placeholder="Zoek op naam, land of rank..."
-            />
-            <select
-              id="standingsFilterLand"
-              class="standings-multiselect"
-              multiple
-              aria-label="Filter op land (meerdere selecties mogelijk)"
-            ></select>
-            <button
-              type="button"
-              id="standingsClearFilters"
-              class="standings-clear-btn"
-            >
-              Filters resetten
-            </button>
+          <div class="st-filters">
+            <div class="st-control">
+              <label class="st-label" for="stSearch">Zoeken</label>
+              <input id="stSearch" class="st-input" type="search" placeholder="Zoek op rank, naam of land…" autocomplete="off" />
+            </div>
+
+            <div class="st-control">
+              <div class="st-label">Land</div>
+              <div id="stCountryFilter" class="st-multi"></div>
+            </div>
+
+            <div class="st-control">
+              <div class="st-label">Rijder</div>
+              <div id="stRiderFilter" class="st-multi"></div>
+            </div>
+
+            <div class="st-control st-control-actions">
+              <div class="st-label">&nbsp;</div>
+              <button id="stReset" class="st-btn" type="button">Reset filters</button>
+            </div>
           </div>
 
-          <div id="standingsStatus" class="standings-status"></div>
+          <div id="stStatus" class="st-status"></div>
         </section>
 
-        <section class="standings-panels">
-          <!-- Overall Men -->
-          <section
-            class="standings-panel is-active"
-            data-tab="overall-men"
-            aria-label="Overall Men standings"
-          >
-            <p class="standings-panel-meta">
-              Huidige stand van de <strong>World Tour Classification (Overall Men)</strong>, direct
-              overgenomen uit het tabblad <em>Overall Men</em> van je Excel. Kolommen: RANK (A),
-              NAME (D), LAND (E), TOTAL (J).
-            </p>
-            <div class="standings-table-wrap">
-              <table class="standings-table">
-                <thead>
-                  <tr>
-                    <th class="standings-col-rank">Rank</th>
-                    <th>Name</th>
-                    <th class="standings-col-country">Land</th>
-                    <th class="standings-col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <!-- 500 Men -->
-          <section
-            class="standings-panel"
-            data-tab="500-men"
-            aria-label="500 meter Men standings"
-          >
-            <p class="standings-panel-meta">
-              Stand 500 meter (Men), op basis van tabblad <em>500 Men</em>. Kolommen: RANK (A),
-              NAME (D), LAND (E), TOTAL (J). Kolommen F, G en H worden omgezet van punten naar
-              klassering en getoond als <strong>CAN 1</strong>, <strong>CAN 2</strong> en
-              <strong>POL</strong>.
-            </p>
-            <div class="standings-table-wrap">
-              <table class="standings-table">
-                <thead>
-                  <tr>
-                    <th class="standings-col-rank">Rank</th>
-                    <th>Name</th>
-                    <th class="standings-col-country">Land</th>
-                    <th>CAN 1</th>
-                    <th>CAN 2</th>
-                    <th>POL</th>
-                    <th class="standings-col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <!-- 1000 Men -->
-          <section
-            class="standings-panel"
-            data-tab="1000-men"
-            aria-label="1000 meter Men standings"
-          >
-            <p class="standings-panel-meta">
-              Stand 1000 meter (Men), op basis van tabblad <em>1000 Men</em>. Kolommen: RANK (A),
-              NAME (D), LAND (E), TOTAL (J). Kolommen F, G en H worden omgezet van punten naar
-              klassering en getoond als <strong>CAN 1</strong>, <strong>CAN 2</strong> en
-              <strong>POL</strong>.
-            </p>
-            <div class="standings-table-wrap">
-              <table class="standings-table">
-                <thead>
-                  <tr>
-                    <th class="standings-col-rank">Rank</th>
-                    <th>Name</th>
-                    <th class="standings-col-country">Land</th>
-                    <th>CAN 1</th>
-                    <th>CAN 2</th>
-                    <th>POL</th>
-                    <th class="standings-col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <!-- 1500 Men -->
-          <section
-            class="standings-panel"
-            data-tab="1500-men"
-            aria-label="1500 meter Men standings"
-          >
-            <p class="standings-panel-meta">
-              Stand 1500 meter (Men), op basis van tabblad <em>1500 Men</em>. Kolommen: RANK (A),
-              NAME (D), LAND (E), TOTAL (J). Kolommen F, G en H worden omgezet van punten naar
-              klassering en getoond als <strong>CAN 1</strong>, <strong>CAN 2</strong> en
-              <strong>POL</strong>.
-            </p>
-            <div class="standings-table-wrap">
-              <table class="standings-table">
-                <thead>
-                  <tr>
-                    <th class="standings-col-rank">Rank</th>
-                    <th>Name</th>
-                    <th class="standings-col-country">Land</th>
-                    <th>CAN 1</th>
-                    <th>CAN 2</th>
-                    <th>POL</th>
-                    <th class="standings-col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <!-- Relay Men -->
-          <section
-            class="standings-panel"
-            data-tab="relay-men"
-            aria-label="Relay Men standings"
-          >
-            <p class="standings-panel-meta">
-              Relay Men standings, op basis van tabblad <em>Relay Men</em>. Kolommen: RANK (A),
-              NAME (D), LAND (E), TOTAL (J). Kolommen F, G en H worden omgezet van punten naar
-              klassering en getoond als <strong>CAN 1</strong>, <strong>CAN 2</strong> en
-              <strong>POL</strong>.
-            </p>
-            <div class="standings-table-wrap">
-              <table class="standings-table">
-                <thead>
-                  <tr>
-                    <th class="standings-col-rank">Rank</th>
-                    <th>Name / Team</th>
-                    <th class="standings-col-country">Land</th>
-                    <th>CAN 1</th>
-                    <th>CAN 2</th>
-                    <th>POL</th>
-                    <th class="standings-col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
+        <section aria-label="Table">
+          <div class="st-table-wrap">
+            <table class="st-table">
+              <thead id="stHead"></thead>
+              <tbody id="stBody"></tbody>
+            </table>
+          </div>
         </section>
       </section>
     </main>
