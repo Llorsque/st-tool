@@ -1,39 +1,14 @@
-
 (function () {
   const DATA_KEY = "shorttrack_hub_excel_data_v1";
+  const STORAGE_KEY = "shorttrack_h2h_state_v2";
+  const HEATS = 5;
+  const SLOTS = 7;
 
   const POINTS_TO_RANK = {
-    100: 1,
-    80: 2,
-    70: 3,
-    60: 4,
-    50: 5,
-    44: 6,
-    40: 7,
-    36: 8,
-    32: 9,
-    28: 10,
-    24: 11,
-    20: 12,
-    18: 13,
-    16: 14,
-    14: 15,
-    12: 16,
-    10: 17,
-    8: 18,
-    6: 19,
-    5: 20,
-    4: 21,
-    3: 22,
-    2: 23,
-    1: 24,
+    100: 1, 80: 2, 70: 3, 60: 4, 50: 5, 44: 6, 40: 7, 36: 8, 32: 9, 28: 10,
+    24: 11, 20: 12, 18: 13, 16: 14, 14: 15, 12: 16, 10: 17, 8: 18, 6: 19, 5: 20,
+    4: 21, 3: 22, 2: 23, 1: 24,
   };
-
-  function pointsToRank(cell) {
-    const num = Number(cell);
-    if (!num || !POINTS_TO_RANK[num]) return "";
-    return POINTS_TO_RANK[num];
-  }
 
   function loadExcelData() {
     try {
@@ -46,501 +21,689 @@
     }
   }
 
-  function normalize(str) {
-    return String(str || "").trim().toLowerCase();
+  function loadPersisted() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
 
-  function excelTimeToString(value) {
-    if (value == null || value === "") return "";
-    if (typeof value === "string") return value.trim();
-
-    if (typeof value === "number") {
-      const totalSeconds = value * 86400;
-      if (!isFinite(totalSeconds) || totalSeconds <= 0) return String(value);
-
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds - minutes * 60;
-      const secWhole = Math.floor(seconds);
-      const ms = Math.round((seconds - secWhole) * 1000);
-
-      const mm = String(minutes).padStart(1, "0");
-      const ss = String(secWhole).padStart(2, "0");
-      const fff = String(ms).padStart(3, "0");
-
-      return mm + ":" + ss + "." + fff;
+  function savePersisted(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn("Opslaan mislukt:", e);
     }
+  }
 
-    return String(value);
+  function normalize(v) {
+    return String(v ?? "").trim().toLowerCase();
+  }
+
+  function stripNonWord(s) {
+    return normalize(s).replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function pointsToRankMaybe(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v ?? "").trim();
+    return POINTS_TO_RANK[n] ? String(POINTS_TO_RANK[n]) : String(v ?? "").trim();
   }
 
   function pickExistingSheet(sheets, candidates) {
-    for (let i = 0; i < candidates.length; i++) {
-      const name = candidates[i];
-      if (sheets[name]) return name;
-    }
+    for (const name of candidates) if (sheets[name]) return name;
     const keys = Object.keys(sheets || {});
     const lowerMap = new Map(keys.map((k) => [k.toLowerCase(), k]));
-    for (let i = 0; i < candidates.length; i++) {
-      const key = lowerMap.get(String(candidates[i]).toLowerCase());
+    for (const cand of candidates) {
+      const key = lowerMap.get(String(cand).toLowerCase());
       if (key && sheets[key]) return key;
     }
     return null;
   }
 
-  function getSheetNamesFor(gender, distanceKey, sheets) {
+  function sheetNameForDistance(gender, dist, sheets) {
     const isMen = gender === "men";
-    const overallCandidates = isMen
-      ? ["Overall Men", "Overall MEN", "Overall"]
-      : ["Overall Women", "Overall WOMEN", "Overall Women ", "Overall"];
+    if (dist === "relay") {
+      // Relay depends on Men/Women slider
+      return pickExistingSheet(
+        sheets,
+        isMen ? ["Relay Men", "Relay MEN", "Relay"] : ["Relay Women", "Relay WOMEN", "Relay"]
+      );
+    }
+    if (dist === "mixed") {
+      // Mixed Relay ignores slider
+      return pickExistingSheet(sheets, ["Mixed Relay", "Mixed relay", "Mixed Relay ", "Mixed"]);
+    }
+    if (dist === "500") {
+      return pickExistingSheet(sheets, isMen ? ["500 Men", "500 MEN", "500"] : ["500 Women", "500 WOMEN", "500"]);
+    }
+    if (dist === "1000") {
+      return pickExistingSheet(sheets, isMen ? ["1000 Men", "1000 MEN", "1000"] : ["1000 Women", "1000 WOMEN", "1000"]);
+    }
+    if (dist === "1500") {
+      return pickExistingSheet(sheets, isMen ? ["1500 Men", "1500 MEN", "1500"] : ["1500 Women", "1500 WOMEN", "1500"]);
+    }
+    return null;
+  }
 
-    const distanceCandidatesByKey = {
-      "500": isMen ? ["500 Men", "500 MEN", "500m Men", "500"] : ["500 Women", "500 WOMEN", "500m Women", "500"],
-      "1000": isMen ? ["1000 Men", "1000 MEN", "1000m Men", "1000"] : ["1000 Women", "1000 WOMEN", "1000m Women", "1000"],
-      "1500": isMen ? ["1500 Men", "1500 MEN", "1500m Men", "1500"] : ["1500 Women", "1500 WOMEN", "1500m Women", "1500"],
-      "relay": isMen ? ["Relay Men", "Relay MEN", "Relay"] : ["Relay Women", "Relay WOMEN", "Relay"],
-      "mixed": ["Mixed Relay", "Mixed relay", "Mixed Relay ", "Mixed"],
+  function sheetNameForOverall(gender, sheets) {
+    const isMen = gender === "men";
+    return pickExistingSheet(sheets, isMen ? ["Overall Men", "Overall MEN", "Overall"] : ["Overall Women", "Overall WOMEN", "Overall"]);
+  }
+
+  function looksLikeRelayHeader(row) {
+    if (!row) return false;
+    const a = stripNonWord(row[0]);
+    const b = stripNonWord(row[1]);
+    const c = stripNonWord(row[2]);
+    const h = stripNonWord(row[7]);
+    const i = stripNonWord(row[8]);
+    return (
+      a.includes("rank") &&
+      b.includes("name") &&
+      (c.includes("land") || c.includes("country") || c.includes("nation")) &&
+      h.includes("total") &&
+      i.includes("time")
+    );
+  }
+
+  function looksLikeNormalHeader(row) {
+    if (!row) return false;
+    const a = stripNonWord(row[0]);
+    const d = stripNonWord(row[3]);
+    const e = stripNonWord(row[4]);
+    const j = stripNonWord(row[9]);
+    return a.includes("rank") && (d.includes("name") || d.includes("naam") || e.includes("land") || j.includes("total"));
+  }
+
+  function buildHeaderIndexMap(headerRow) {
+    const map = new Map();
+    (headerRow || []).forEach((cell, idx) => {
+      const key = stripNonWord(cell);
+      if (!key) return;
+      if (!map.has(key)) map.set(key, idx);
+    });
+    return map;
+  }
+
+  function getIdx(map, candidates, fallback) {
+    for (const c of candidates) {
+      const hit = map.get(stripNonWord(c));
+      if (typeof hit === "number") return hit;
+    }
+    return fallback;
+  }
+
+  function getCell(row, idx) {
+    if (!row) return "";
+    return idx >= 0 && idx < row.length ? row[idx] : "";
+  }
+
+  function parseDistanceRows(sheetRows, mode) {
+    const rows = Array.isArray(sheetRows) ? sheetRows : [];
+    if (!rows.length) return [];
+
+    const isRelay = mode === "relay";
+    const hasHeader = isRelay ? looksLikeRelayHeader(rows[0]) : looksLikeNormalHeader(rows[0]);
+    const headerMap = hasHeader ? buildHeaderIndexMap(rows[0]) : new Map();
+    const startIdx = hasHeader ? 1 : 0;
+
+    // Relay headers (A..I): RANK NAME LAND CAN 1 CAN 2 POL NED TOTAL TIME
+    const relayIdx = {
+      rank: getIdx(headerMap, ["rank", "RANK"], 0),
+      name: getIdx(headerMap, ["name", "NAME"], 1),
+      land: getIdx(headerMap, ["land", "LAND", "country"], 2),
+      can1: getIdx(headerMap, ["can 1", "can1", "CAN 1", "CAN1"], 3),
+      can2: getIdx(headerMap, ["can 2", "can2", "CAN 2", "CAN2"], 4),
+      pol: getIdx(headerMap, ["pol", "POL"], 5),
+      time: getIdx(headerMap, ["time", "TIME"], 8),
     };
 
-    const overallName = pickExistingSheet(sheets, overallCandidates);
-    const distanceName = pickExistingSheet(sheets, distanceCandidatesByKey[distanceKey] || []);
-
-    return { overallName, distanceName };
-  }
-
-  function buildIndex(sheet) {
-    const index = new Map();
-    const rows = (sheet && sheet.rows) || [];
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const name = row && row[3]; // D
-      const key = normalize(name);
-      if (!key) continue;
-      if (!index.has(key)) index.set(key, row);
-    }
-    return index;
-  }
-
-  document.addEventListener("DOMContentLoaded", function () {
-    const statusEl = document.getElementById("h2hStatus");
-    const genderBtns = Array.from(document.querySelectorAll(".h2h-gender-btn"));
-    const distanceBtns = Array.from(document.querySelectorAll(".h2h-distance-btn"));
-    const pickerGrid = document.getElementById("h2hPickerGrid");
-    const tableBody = document.getElementById("h2hBody");
-    const tableTitle = document.getElementById("h2hTableTitle");
-
-    const data = loadExcelData();
-    if (!data || !data.sheets) {
-      if (statusEl) {
-        statusEl.textContent =
-          "Geen Excel-data gevonden. Upload eerst een datafile op het hoofdmenu.";
+    const out = [];
+    for (let i = startIdx; i < rows.length; i++) {
+      const r = rows[i] || [];
+      if (isRelay) {
+        const rank = String(getCell(r, relayIdx.rank) ?? "").trim();
+        const name = String(getCell(r, relayIdx.name) ?? "").trim();
+        const land = String(getCell(r, relayIdx.land) ?? "").trim();
+        const can1 = pointsToRankMaybe(getCell(r, relayIdx.can1));
+        const can2 = pointsToRankMaybe(getCell(r, relayIdx.can2));
+        const pol = pointsToRankMaybe(getCell(r, relayIdx.pol));
+        const time = String(getCell(r, relayIdx.time) ?? "").trim();
+        if (!rank && !name && !land && !time) continue;
+        out.push({ rank, name, land, can1, can2, pol, time });
+      } else {
+        // Normal sheets: A rank, D name, E land, F/G/H points-ish for CAN1/CAN2/POL, K time
+        const rank = String(r[0] ?? "").trim(); // A
+        const name = String(r[3] ?? "").trim(); // D
+        const land = String(r[4] ?? "").trim(); // E
+        const can1 = pointsToRankMaybe(r[5]); // F
+        const can2 = pointsToRankMaybe(r[6]); // G
+        const pol = pointsToRankMaybe(r[7]); // H
+        const time = String(r[10] ?? "").trim(); // K
+        if (!rank && !name && !land && !time) continue;
+        out.push({ rank, name, land, can1, can2, pol, time });
       }
+    }
+    return out;
+  }
+
+  function parseOverallMap(sheetRows) {
+    // Overall sheets: A rank, D name, E land
+    const rows = Array.isArray(sheetRows) ? sheetRows : [];
+    if (!rows.length) return { byName: new Map(), byLand: new Map() };
+
+    const hasHeader = looksLikeNormalHeader(rows[0]);
+    const startIdx = hasHeader ? 1 : 0;
+
+    const byName = new Map();
+    const byLand = new Map();
+
+    for (let i = startIdx; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const rank = String(r[0] ?? "").trim();
+      const name = String(r[3] ?? "").trim();
+      const land = String(r[4] ?? "").trim();
+      if (name) byName.set(normalize(name), rank);
+      if (land) byLand.set(normalize(land), rank);
+    }
+
+    return { byName, byLand };
+  }
+
+  function emptyHeats() {
+    return Array.from({ length: HEATS }, () => Array.from({ length: SLOTS }, () => null));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const excel = loadExcelData();
+    const statusEl = document.getElementById("h2hStatus");
+    const saveBtn = document.getElementById("h2hSave");
+    const saveStateEl = document.getElementById("h2hSaveState");
+    const footerEl = document.getElementById("h2hFooter");
+    const suggestEl = document.getElementById("h2hSuggest");
+
+    if (!excel?.sheets) {
+      statusEl.textContent = "Geen Excel-data gevonden. Upload eerst je Excel op het hoofdmenu.";
       return;
     }
 
-    const sheets = data.sheets;
+    const genderBtns = Array.from(document.querySelectorAll(".h2h-gender"));
+    const distBtns = Array.from(document.querySelectorAll(".h2h-tab"));
+    const heatSelEl = document.getElementById("h2hHeatSelector");
+    const heatsEl = document.getElementById("h2hHeats");
+    const bodyEl = document.getElementById("h2hBody");
 
-    let gender = "men";
-    let distance = "500";
-    const selected = new Array(8).fill("");
+    const persisted = loadPersisted();
 
-    let riderOptions = []; // {name, land}
-    let overallIndex = new Map();
-    let distanceIndex = new Map();
-    let activeSheetNames = { overallName: null, distanceName: null };
+    const state = {
+      gender: persisted?.gender || "men",
+      dist: persisted?.dist || "500",
+      activeHeat: Number.isFinite(persisted?.activeHeat) ? persisted.activeHeat : 0,
+      heats: Array.isArray(persisted?.heats) ? persisted.heats : emptyHeats(),
+      options: [],
+      rows: [],
+      overallMap: { byName: new Map(), byLand: new Map() },
+      sheetName: null,
+      overallSheetName: null,
+      activeInput: null,
+    };
 
-    const comboboxes = [];
-
-    function buildRiderListFromOverallSheet(overallName) {
-      const sheet = sheets[overallName];
-      const rows = (sheet && sheet.rows) || [];
-      const items = rows
-        .map((r) => ({
-          name: String(r[3] || "").trim(), // D
-          land: String(r[4] || "").trim(), // E
-        }))
-        .filter((x) => x.name);
-
-      const seen = new Set();
-      const unique = [];
-      for (const item of items) {
-        const key = normalize(item.name);
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        unique.push(item);
-      }
-
-      unique.sort((a, b) => a.name.localeCompare(b.name));
-      return unique;
+    function markSaved(msg) {
+      saveStateEl.textContent = msg;
+      saveStateEl.style.opacity = "1";
+      clearTimeout(markSaved._t);
+      markSaved._t = setTimeout(() => {
+        saveStateEl.style.opacity = "0.85";
+      }, 1200);
     }
 
-    function rebuildIndexes() {
-      const { overallName, distanceName } = activeSheetNames;
-      overallIndex = overallName ? buildIndex(sheets[overallName]) : new Map();
-      distanceIndex = distanceName ? buildIndex(sheets[distanceName]) : new Map();
-      riderOptions = overallName ? buildRiderListFromOverallSheet(overallName) : [];
-    }
-
-    function setActiveGender(next) {
-      gender = next;
-      genderBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.gender === gender));
-      resolveSheetsAndRender();
-    }
-
-    function setActiveDistance(next) {
-      distance = next;
-      distanceBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.distance === distance));
-      resolveSheetsAndRender();
-    }
-
-    function resolveSheetsAndRender() {
-      activeSheetNames = getSheetNamesFor(gender, distance, sheets);
-
-      const missing = [];
-      if (!activeSheetNames.overallName) missing.push("Overall sheet (bijv. 'Overall Men')");
-      if (!activeSheetNames.distanceName) missing.push("Distance sheet (bijv. '500 Men')");
-
-      if (missing.length) {
-        if (statusEl) {
-          statusEl.textContent =
-            "Kan benodigde tabbladen niet vinden: " + missing.join(" + ") + ".";
-        }
-      } else if (statusEl) {
-        statusEl.textContent =
-          "Bron: " + activeSheetNames.overallName + " + " + activeSheetNames.distanceName + ".";
-      }
-
-      rebuildIndexes();
-      updateComboboxes();
-      renderTable();
-    }
-
-    function updateComboboxes() {
-      for (let i = 0; i < comboboxes.length; i++) {
-        comboboxes[i].setLabel(selected[i] || "");
-      }
-    }
-
-    function getOverallRow(name) {
-      return overallIndex.get(normalize(name)) || null;
-    }
-
-    function getDistanceRow(name) {
-      return distanceIndex.get(normalize(name)) || null;
-    }
-
-    function getOverallRank(name) {
-      const row = getOverallRow(name);
-      const val = row ? row[0] : ""; // A
-      return val && String(val).trim() ? String(val).trim() : "-";
-    }
-
-    function getWTFromDistance(name) {
-      const row = getDistanceRow(name);
-      const wt = row ? row[0] : ""; // A
-      return wt && String(wt).trim() ? String(wt).trim() : "-";
-    }
-
-    function getLand(name) {
-      const o = getOverallRow(name);
-      const d = getDistanceRow(name);
-      const land = (o && o[4]) || (d && d[4]) || "";
-      return land && String(land).trim() ? String(land).trim() : "-";
-    }
-
-    function getDistanceFields(name) {
-      const row = getDistanceRow(name);
-      if (!row) {
-        return { can1: "-", can2: "-", pol: "-", time: "-" };
-      }
-
-      const can1 = pointsToRank(row[5]); // F
-      const can2 = pointsToRank(row[6]); // G
-      const pol = pointsToRank(row[7]);  // H
-      const timeVal = excelTimeToString(row[10]); // K
-
-      return {
-        can1: can1 !== "" ? String(can1) : "-",
-        can2: can2 !== "" ? String(can2) : "-",
-        pol: pol !== "" ? String(pol) : "-",
-        time: timeVal && String(timeVal).trim() ? String(timeVal).trim() : "-",
-      };
-    }
-
-    function getOptions(query, slotIndex) {
-      const q = (query || "").trim().toLowerCase();
-
-      const selectedElsewhere = new Set(
-        selected
-          .map((s, idx) => (idx === slotIndex ? "" : normalize(s)))
-          .filter(Boolean)
-      );
-
-      const filtered = riderOptions.filter((opt) => {
-        const key = normalize(opt.name);
-        if (selectedElsewhere.has(key)) return false;
-        if (!q) return true;
-        const hay = (opt.name + " " + (opt.land || "")).toLowerCase();
-        return hay.includes(q);
+    function persistNow() {
+      savePersisted({
+        gender: state.gender,
+        dist: state.dist,
+        activeHeat: state.activeHeat,
+        heats: state.heats,
+        savedAt: Date.now(),
       });
-
-      return filtered.map((opt) => ({
-        value: opt.name,
-        label: opt.name,
-        meta: opt.land ? opt.land : "",
-      }));
+      markSaved("Opgeslagen ✓");
     }
 
-    function onSelect(name, slotIndex) {
-      selected[slotIndex] = name;
+    function scheduleAutosave() {
+      saveStateEl.textContent = "Wijzigingen…";
+      saveStateEl.style.opacity = "1";
+      clearTimeout(scheduleAutosave._t);
+      scheduleAutosave._t = setTimeout(() => {
+        persistNow();
+      }, 350);
+    }
+
+    function isRelayMode() {
+      return state.dist === "relay" || state.dist === "mixed";
+    }
+
+    function setGender(next) {
+      state.gender = next;
+      genderBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.gender === next));
+      rebuildData();
+      scheduleAutosave();
+    }
+
+    function setDist(next) {
+      state.dist = next;
+      distBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.dist === next));
+      rebuildData();
+      scheduleAutosave();
+    }
+
+    function setActiveHeat(idx) {
+      state.activeHeat = idx;
+      renderHeatSelector();
       renderTable();
-      comboboxes[slotIndex].setLabel(name);
+      scheduleAutosave();
     }
 
-    function onClear(slotIndex) {
-      selected[slotIndex] = "";
-      renderTable();
-      comboboxes[slotIndex].setLabel("");
-    }
+    function rebuildData() {
+      const sheets = excel.sheets;
 
-    function renderTable() {
-      if (!tableBody) return;
+      // Data source rules:
+      // - Relay uses Relay Men/Women depending on slider
+      // - Mixed Relay uses Mixed Relay regardless of slider
+      const distSheet = sheetNameForDistance(state.gender, state.dist, sheets);
+      state.sheetName = distSheet;
 
-      const picked = selected.filter((s) => s && String(s).trim() !== "");
-      tableBody.innerHTML = "";
+      state.rows = distSheet && sheets[distSheet]
+        ? parseDistanceRows(sheets[distSheet].rows, isRelayMode() ? "relay" : "normal")
+        : [];
 
-      const labelMap = {
-        "500": "500m",
-        "1000": "1000m",
-        "1500": "1500m",
-        "relay": "Relay",
-        "mixed": "Mixed relay",
-      };
-
-      if (tableTitle) {
-        const g = gender === "men" ? "Men" : "Women";
-        tableTitle.textContent =
-          "Vergelijking · " + g + " · " + (labelMap[distance] || distance);
+      // Options come from the ACTIVE distance sheet (relay/mixed = teams/countries)
+      const seen = new Set();
+      const options = [];
+      for (const r of state.rows) {
+        const name = String(r.name || "").trim();
+        const land = String(r.land || "").trim();
+        if (!name) continue;
+        const key = normalize(name) + "|" + normalize(land);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        options.push({ name, land });
       }
+      options.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      state.options = options;
 
-      if (!picked.length) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 8;
-        td.className = "h2h-empty";
-        td.textContent = "Selecteer één of meer rijders (max 8) om te vergelijken.";
-        tr.appendChild(td);
-        tableBody.appendChild(tr);
+      // Overall map:
+      // - For mixed relay slider doesn't matter; we default overall lookup to Overall Men.
+      // - Otherwise: gender-specific.
+      const overallGender = state.dist === "mixed" ? "men" : state.gender;
+      const overallSheet = sheetNameForOverall(overallGender, sheets);
+      state.overallSheetName = overallSheet;
+      state.overallMap = overallSheet && sheets[overallSheet] ? parseOverallMap(sheets[overallSheet].rows) : { byName: new Map(), byLand: new Map() };
+
+      renderStatus();
+      renderHeats();
+      renderTable();
+      closeSuggestions();
+    }
+
+    function renderStatus() {
+      const g = state.gender === "men" ? "Men" : "Women";
+      const dLabel =
+        state.dist === "500" ? "500m" :
+        state.dist === "1000" ? "1000m" :
+        state.dist === "1500" ? "1500m" :
+        state.dist === "relay" ? "Relay" : "Mixed Relay";
+
+      const distInfo = state.sheetName ? `Bron: ${state.sheetName}` : "Bron: (niet gevonden)";
+      const overallInfo = state.overallSheetName ? `Overall: ${state.overallSheetName}` : "Overall: (niet gevonden)";
+      const mixedHint = state.dist === "mixed" ? " · Mixed: schuif Men/Women heeft geen effect" : "";
+
+      statusEl.textContent = `${dLabel} · ${g}${mixedHint} · ${distInfo} · ${overallInfo} · Opties: ${state.options.length}`;
+      footerEl.textContent = `Vergelijking: ${state.dist === "mixed" ? "Mixed Relay" : `${g} · ${dLabel}`} · Rit ${state.activeHeat + 1}`;
+    }
+
+    function renderHeatSelector() {
+      heatSelEl.innerHTML = "";
+      for (let i = 0; i < HEATS; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "h2h-heatbtn" + (i === state.activeHeat ? " is-active" : "");
+        b.textContent = String(i + 1);
+        b.addEventListener("click", () => setActiveHeat(i));
+        heatSelEl.appendChild(b);
+      }
+    }
+
+    function slotValue(heatIdx, slotIdx) {
+      const v = state.heats?.[heatIdx]?.[slotIdx];
+      if (!v) return "";
+      if (typeof v === "string") return v;
+      return String(v.name || "");
+    }
+
+    function setSlot(heatIdx, slotIdx, objOrNull) {
+      if (!state.heats[heatIdx]) state.heats[heatIdx] = Array.from({ length: SLOTS }, () => null);
+      state.heats[heatIdx][slotIdx] = objOrNull;
+      scheduleAutosave();
+      renderHeats();
+      renderTable();
+    }
+
+    function clearSlot(heatIdx, slotIdx) {
+      setSlot(heatIdx, slotIdx, null);
+      closeSuggestions();
+    }
+
+    function setActiveInput(heatIndex, slotIndex, inputEl, wrapEl) {
+      document.querySelectorAll(".h2h-slot.is-active").forEach((el) => el.classList.remove("is-active"));
+      wrapEl.classList.add("is-active");
+      state.activeInput = { heatIndex, slotIndex, inputEl, wrapEl };
+    }
+
+    function selectedKeysForHeat(heatIdx) {
+      const set = new Set();
+      for (const v of (state.heats[heatIdx] || [])) {
+        if (!v) continue;
+        const name = typeof v === "string" ? v : (v.name || "");
+        const land = typeof v === "string" ? "" : (v.land || "");
+        set.add(normalize(name) + "|" + normalize(land));
+      }
+      return set;
+    }
+
+    function positionSuggestPanel() {
+      if (!state.activeInput) return;
+      const { inputEl } = state.activeInput;
+      const rect = inputEl.getBoundingClientRect();
+      const hostRect = document.querySelector(".h2h-layout")?.getBoundingClientRect() || { left: 0, top: 0 };
+
+      const left = rect.left - hostRect.left;
+      const top = rect.bottom - hostRect.top + 6;
+
+      suggestEl.style.left = `${Math.max(0, left)}px`;
+      suggestEl.style.top = `${Math.max(0, top)}px`;
+      suggestEl.style.width = `${Math.max(260, rect.width)}px`;
+    }
+
+    function closeSuggestions() {
+      suggestEl.classList.remove("is-open");
+      suggestEl.innerHTML = "";
+    }
+
+    function showSuggestionsForActiveInput() {
+      if (!state.activeInput) return;
+      const { heatIndex, slotIndex, inputEl } = state.activeInput;
+      const q = normalize(inputEl.value || "");
+      suggestEl.innerHTML = "";
+
+      if (!q) {
+        closeSuggestions();
         return;
       }
 
-      picked.forEach((name) => {
-        const land = getLand(name);
-        const fields = getDistanceFields(name);
-        const overall = getOverallRank(name);
-        const wt = getWTFromDistance(name);
+      positionSuggestPanel();
 
-        const tr = document.createElement("tr");
+      const used = selectedKeysForHeat(heatIndex);
+      const cur = state.heats?.[heatIndex]?.[slotIndex];
+      if (cur) {
+        const curKey = normalize(cur.name || "") + "|" + normalize(cur.land || "");
+        used.delete(curKey);
+      }
 
-        function cell(text, cls) {
-          const td = document.createElement("td");
-          if (cls) td.className = cls;
-          td.textContent = text == null ? "" : text;
-          return td;
+      const hits = state.options
+        .filter((o) => normalize(o.name).includes(q) || normalize(o.land).includes(q))
+        .slice(0, 40);
+
+      if (!hits.length) {
+        const div = document.createElement("div");
+        div.className = "h2h-suggest-item is-disabled";
+        div.textContent = "Geen resultaten";
+        suggestEl.appendChild(div);
+        suggestEl.classList.add("is-open");
+        return;
+      }
+
+      hits.forEach((o) => {
+        const key = normalize(o.name) + "|" + normalize(o.land);
+        const disabled = used.has(key);
+
+        const item = document.createElement("div");
+        item.className = "h2h-suggest-item" + (disabled ? " is-disabled" : "");
+
+        const main = document.createElement("div");
+        main.className = "h2h-suggest-main";
+        main.textContent = o.name;
+
+        const sub = document.createElement("div");
+        sub.className = "h2h-suggest-sub";
+        sub.textContent = o.land || "";
+
+        item.appendChild(main);
+        item.appendChild(sub);
+
+        if (!disabled) {
+          item.addEventListener("click", () => {
+            setSlot(heatIndex, slotIndex, { name: o.name, land: o.land });
+            closeSuggestions();
+          });
         }
 
-        tr.appendChild(cell(name));
-        tr.appendChild(cell(land, "h2h-col-small"));
-        tr.appendChild(cell(fields.can1, "h2h-col-small"));
-        tr.appendChild(cell(fields.can2, "h2h-col-small"));
-        tr.appendChild(cell(fields.pol, "h2h-col-small"));
-        tr.appendChild(cell(overall, "h2h-col-small"));
-        tr.appendChild(cell(wt, "h2h-col-small"));
-        tr.appendChild(cell(fields.time, "h2h-col-time"));
-
-        tableBody.appendChild(tr);
+        suggestEl.appendChild(item);
       });
+
+      suggestEl.classList.add("is-open");
     }
 
-    function createCombobox({ mountEl, slotIndex }) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "h2h-combobox";
+    function renderHeats() {
+      renderHeatSelector();
 
-      const input = document.createElement("input");
-      input.className = "h2h-input";
-      input.type = "text";
-      input.placeholder = "Type om te zoeken…";
-      input.autocomplete = "off";
-      input.spellcheck = false;
+      heatsEl.innerHTML = "";
+      for (let h = 0; h < HEATS; h++) {
+        const card = document.createElement("div");
+        card.className = "h2h-heat";
 
-      const clear = document.createElement("button");
-      clear.type = "button";
-      clear.className = "h2h-clear";
-      clear.title = "Leegmaken";
-      clear.textContent = "×";
+        const head = document.createElement("div");
+        head.className = "h2h-heathead";
 
-      const dropdown = document.createElement("div");
-      dropdown.className = "h2h-dropdown";
+        const title = document.createElement("div");
+        title.className = "h2h-heattitle";
+        title.textContent = `Rit ${h + 1}`;
 
-      wrapper.appendChild(input);
-      wrapper.appendChild(clear);
-      wrapper.appendChild(dropdown);
-      mountEl.appendChild(wrapper);
+        const filled = (state.heats[h] || []).filter(Boolean).length;
+        const meta = document.createElement("div");
+        meta.className = "h2h-heatmeta";
+        meta.textContent = `${filled}/${SLOTS}`;
 
-      let highlightedIndex = -1;
-      let open = false;
-      let currentItems = [];
+        head.appendChild(title);
+        head.appendChild(meta);
 
-      function render(items) {
-        dropdown.innerHTML = "";
-        currentItems = items;
+        const slots = document.createElement("div");
+        slots.className = "h2h-slots";
 
-        if (!items.length) {
-          const empty = document.createElement("div");
-          empty.className = "h2h-option";
-          empty.textContent = "Geen resultaten";
-          dropdown.appendChild(empty);
-          highlightedIndex = -1;
-          return;
-        }
+        for (let s = 0; s < SLOTS; s++) {
+          const wrap = document.createElement("div");
+          wrap.className = "h2h-slot";
 
-        items.forEach((item, idx) => {
-          const opt = document.createElement("div");
-          opt.className = "h2h-option";
-          opt.dataset.idx = String(idx);
-          opt.innerHTML = `${item.label} <small>${item.meta || ""}</small>`;
+          const input = document.createElement("input");
+          input.type = "search";
+          input.placeholder = "Type om te zoeken…";
+          input.autocomplete = "off";
+          input.value = slotValue(h, s);
 
-          opt.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            selectIdx(idx);
+          const clear = document.createElement("button");
+          clear.type = "button";
+          clear.className = "h2h-clear";
+          clear.textContent = "×";
+          clear.title = "Wissen";
+          clear.style.visibility = input.value ? "visible" : "hidden";
+
+          clear.addEventListener("click", (e) => {
+            e.stopPropagation();
+            clearSlot(h, s);
           });
 
-          dropdown.appendChild(opt);
-        });
+          input.addEventListener("focus", () => {
+            setActiveInput(h, s, input, wrap);
+            showSuggestionsForActiveInput();
+          });
 
-        highlightedIndex = -1;
-      }
+          input.addEventListener("input", () => {
+            clear.style.visibility = input.value ? "visible" : "hidden";
+            setActiveInput(h, s, input, wrap);
+            showSuggestionsForActiveInput();
+            // If user manually edits text, keep selection but do not set land.
+            // We only set full object on click/enter from suggestions.
+            if (!input.value) setSlot(h, s, null);
+            else scheduleAutosave();
+          });
 
-      function openDropdown() {
-        if (open) return;
-        open = true;
-        dropdown.classList.add("is-open");
-      }
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+              closeSuggestions();
+              input.blur();
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const first = suggestEl.querySelector(".h2h-suggest-item:not(.is-disabled)");
+              if (first) first.click();
+            }
+          });
 
-      function closeDropdown() {
-        open = false;
-        dropdown.classList.remove("is-open");
-        highlightedIndex = -1;
-        updateHighlight();
-      }
-
-      function updateHighlight() {
-        const nodes = Array.from(dropdown.querySelectorAll(".h2h-option"));
-        nodes.forEach((n) => n.classList.remove("is-highlighted"));
-        if (highlightedIndex >= 0 && highlightedIndex < nodes.length) {
-          nodes[highlightedIndex].classList.add("is-highlighted");
-          nodes[highlightedIndex].scrollIntoView({ block: "nearest" });
-        }
-      }
-
-      function selectIdx(idx) {
-        const item = currentItems[idx];
-        if (!item || !item.value) return;
-        input.value = item.value;
-        closeDropdown();
-        onSelect(item.value, slotIndex);
-      }
-
-      function refresh() {
-        const q = input.value.trim().toLowerCase();
-        const items = getOptions(q, slotIndex);
-        render(items.slice(0, 120));
-        openDropdown();
-      }
-
-      input.addEventListener("focus", refresh);
-      input.addEventListener("input", refresh);
-
-      input.addEventListener("keydown", (e) => {
-        if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-          refresh();
-          return;
+          wrap.appendChild(input);
+          wrap.appendChild(clear);
+          slots.appendChild(wrap);
         }
 
-        if (e.key === "Escape") {
-          closeDropdown();
-          return;
-        }
-
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          highlightedIndex = Math.min(highlightedIndex + 1, currentItems.length - 1);
-          updateHighlight();
-          return;
-        }
-
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          highlightedIndex = Math.max(highlightedIndex - 1, 0);
-          updateHighlight();
-          return;
-        }
-
-        if (e.key === "Enter") {
-          if (highlightedIndex >= 0) {
-            e.preventDefault();
-            selectIdx(highlightedIndex);
-          }
-          return;
-        }
-      });
-
-      clear.addEventListener("click", () => {
-        input.value = "";
-        closeDropdown();
-        onClear(slotIndex);
-      });
-
-      document.addEventListener("click", (e) => {
-        if (!wrapper.contains(e.target)) closeDropdown();
-      });
-
-      return {
-        setLabel(label) {
-          input.value = label || "";
-        },
-      };
-    }
-
-    genderBtns.forEach((btn) => {
-      btn.addEventListener("click", () => setActiveGender(btn.dataset.gender));
-    });
-
-    distanceBtns.forEach((btn) => {
-      btn.addEventListener("click", () => setActiveDistance(btn.dataset.distance));
-    });
-
-    if (pickerGrid) {
-      pickerGrid.innerHTML = "";
-      for (let i = 0; i < 8; i++) {
-        const card = document.createElement("div");
-        card.className = "h2h-picker-card";
-
-        const label = document.createElement("div");
-        label.className = "h2h-picker-label";
-        label.textContent = "Rijder " + (i + 1);
-
-        card.appendChild(label);
-
-        const mount = document.createElement("div");
-        card.appendChild(mount);
-
-        pickerGrid.appendChild(card);
-
-        comboboxes.push(createCombobox({ mountEl: mount, slotIndex: i }));
+        card.appendChild(head);
+        card.appendChild(slots);
+        heatsEl.appendChild(card);
       }
     }
 
-    setActiveGender("men");
-    setActiveDistance("500");
+    function findDistanceRowByName(name, land) {
+      const nameKey = normalize(name);
+      const landKey = normalize(land);
+
+      return (
+        state.rows.find((r) => normalize(r.name) === nameKey) ||
+        (land ? state.rows.find((r) => normalize(r.land) === landKey && normalize(r.name).includes(nameKey)) : null) ||
+        null
+      );
+    }
+
+    function buildCompareRow(sel) {
+      const name = sel?.name || "-";
+      const land = sel?.land || "-";
+
+      const row = findDistanceRowByName(name, land);
+
+      const outLand = (row?.land || land || "-").trim() || "-";
+      const can1 = row?.can1 ? String(row.can1).trim() : "-";
+      const can2 = row?.can2 ? String(row.can2).trim() : "-";
+      const pol = row?.pol ? String(row.pol).trim() : "-";
+      const wt = row?.rank ? String(row.rank).trim() : "-";
+      const time = row?.time ? String(row.time).trim() : "-";
+
+      const nameKey = normalize(name);
+      const landKey = normalize(outLand);
+      let overall = "-";
+      if (state.overallMap.byName.has(nameKey)) overall = state.overallMap.byName.get(nameKey) || "-";
+      else if (state.overallMap.byLand.has(landKey)) overall = state.overallMap.byLand.get(landKey) || "-";
+
+      return { name, land: outLand, can1, can2, pol, overall, wt, time };
+    }
+
+    function renderTable() {
+      bodyEl.innerHTML = "";
+
+      const rawSelections = state.heats[state.activeHeat] || [];
+      // Only include entries that are objects with a name (ignore raw typed text not selected)
+      const selections = rawSelections
+        .filter(Boolean)
+        .map((v) => (typeof v === "string" ? { name: v, land: "" } : v))
+        .filter((v) => String(v.name || "").trim().length > 0);
+
+      if (!selections.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 8;
+        td.style.color = "rgba(255,255,255,.72)";
+        td.style.padding = "14px 12px";
+        td.textContent = "Selecteer rijders/teams in Rit " + (state.activeHeat + 1) + " om te vergelijken.";
+        tr.appendChild(td);
+        bodyEl.appendChild(tr);
+        return;
+      }
+
+      selections.map(buildCompareRow).forEach((r) => {
+        const tr = document.createElement("tr");
+        const td = (v) => {
+          const el = document.createElement("td");
+          el.textContent = v;
+          return el;
+        };
+        tr.appendChild(td(r.name));
+        tr.appendChild(td(r.land));
+        tr.appendChild(td(r.can1));
+        tr.appendChild(td(r.can2));
+        tr.appendChild(td(r.pol));
+        tr.appendChild(td(r.overall));
+        tr.appendChild(td(r.wt));
+        tr.appendChild(td(r.time));
+        bodyEl.appendChild(tr);
+      });
+    }
+
+    // Wiring
+    genderBtns.forEach((btn) => btn.addEventListener("click", () => setGender(btn.dataset.gender)));
+    distBtns.forEach((btn) => btn.addEventListener("click", () => setDist(btn.dataset.dist)));
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        if (suggestEl.classList.contains("is-open")) positionSuggestPanel();
+      },
+      { passive: true }
+    );
+
+    window.addEventListener("resize", () => {
+      if (suggestEl.classList.contains("is-open")) positionSuggestPanel();
+    });
+
+    document.addEventListener("click", (e) => {
+      const inSuggest = suggestEl.contains(e.target);
+      const inSlot = e.target.closest && e.target.closest(".h2h-slot");
+      if (!inSuggest && !inSlot) closeSuggestions();
+    });
+
+    saveBtn.addEventListener("click", () => {
+      persistNow();
+    });
+
+    // Init: mark active buttons
+    genderBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.gender === state.gender));
+    distBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.dist === state.dist));
+
+    // Ensure heats shape
+    if (!Array.isArray(state.heats) || state.heats.length !== HEATS) state.heats = emptyHeats();
+    for (let h = 0; h < HEATS; h++) {
+      if (!Array.isArray(state.heats[h]) || state.heats[h].length !== SLOTS) {
+        state.heats[h] = Array.from({ length: SLOTS }, () => null);
+      }
+      state.heats[h] = state.heats[h].map((v) => {
+        if (!v) return null;
+        if (typeof v === "string") return { name: v, land: "" };
+        return { name: String(v.name || ""), land: String(v.land || "") };
+      });
+    }
+    state.activeHeat = Math.max(0, Math.min(HEATS - 1, Number(state.activeHeat) || 0));
+
+    // Render
+    renderHeatSelector();
+    rebuildData();
+    // Persist once to ensure state exists in storage
+    persistNow();
   });
 })();

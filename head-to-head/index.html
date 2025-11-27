@@ -1,24 +1,27 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Head to Head | Shorttrack Hub</title>
-    <link rel="stylesheet" href="../assets/styles.css" />
-    <link rel="stylesheet" href="../assets/head-to-head.css" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <link rel="stylesheet" href="../assets/head-to-head.css" />
+
     <script defer src="../assets/head-to-head.js"></script>
   </head>
+
   <body>
     <main class="app-shell">
       <section class="h2h-layout">
-        <header class="h2h-header-line">
+        <header class="h2h-header">
           <div>
             <div class="breadcrumb">
               <a href="../index.html">Shorttrack Hub</a>
@@ -27,14 +30,11 @@
             </div>
             <h1 class="h2h-title">Head to Head</h1>
             <p class="h2h-subtitle">
-              Selecteer tot <strong>8 rijders</strong> en vergelijk
-              <strong>CAN 1 / CAN 2 / POL</strong> (uit de gekozen afstand),
-              <strong>Overall</strong> (uit Overall Men/Women),
-              <strong>WT</strong> (kolom A uit het gekozen afstand-tabblad) en
-              <strong>Time</strong> (kolom K uit de afstand).
-              Als data ontbreekt tonen we <strong>-</strong> (land blijft altijd gevuld).
+              Zet per <strong>Rit</strong> tot <strong>7</strong> rijders/teams klaar. Je kunt 5 ritten voorbereiden en
+              bovenin wisselen welke rit je vergelijkt. Selecties worden automatisch opgeslagen.
             </p>
           </div>
+
           <div class="page-header-actions">
             <a href="../index.html" class="home-button">
               <span>←</span>
@@ -43,65 +43,62 @@
           </div>
         </header>
 
-        <section class="h2h-controls" aria-label="Head to head controls">
-          <div class="h2h-toprow">
-            <div class="h2h-gender-toggle" role="group" aria-label="Kies Men of Women">
-              <button class="h2h-gender-btn is-active" type="button" data-gender="men">
-                Men
-              </button>
-              <button class="h2h-gender-btn" type="button" data-gender="women">
-                Women
-              </button>
+        <section class="h2h-controls" aria-label="Controls">
+          <div class="h2h-controls-top">
+            <div class="h2h-toggle" role="group" aria-label="Men or Women">
+              <button type="button" class="h2h-gender" data-gender="men">Men</button>
+              <button type="button" class="h2h-gender" data-gender="women">Women</button>
             </div>
 
-            <div class="h2h-distance-tabs" role="tablist" aria-label="Afstand keuzes">
-              <button class="h2h-distance-btn is-active" type="button" data-distance="500">
-                500m
-              </button>
-              <button class="h2h-distance-btn" type="button" data-distance="1000">
-                1000m
-              </button>
-              <button class="h2h-distance-btn" type="button" data-distance="1500">
-                1500m
-              </button>
-              <button class="h2h-distance-btn" type="button" data-distance="relay">
-                Relay
-              </button>
-              <button class="h2h-distance-btn" type="button" data-distance="mixed">
-                Mixed relay
-              </button>
+            <div class="h2h-tabs" role="tablist" aria-label="Afstanden">
+              <button type="button" class="h2h-tab" data-dist="500">500m</button>
+              <button type="button" class="h2h-tab" data-dist="1000">1000m</button>
+              <button type="button" class="h2h-tab" data-dist="1500">1500m</button>
+              <button type="button" class="h2h-tab" data-dist="relay">Relay</button>
+              <button type="button" class="h2h-tab" data-dist="mixed">Mixed Relay</button>
+            </div>
+
+            <div class="h2h-savebar">
+              <button id="h2hSave" class="h2h-btn" type="button">Opslaan</button>
+              <div id="h2hSaveState" class="h2h-savestate" aria-live="polite"></div>
             </div>
           </div>
 
-          <div id="h2hStatus" class="h2h-status"></div>
+          <div class="h2h-heatbar">
+            <div class="h2h-label">Vergelijk Rit</div>
+            <div id="h2hHeatSelector" class="h2h-heatselector" role="group" aria-label="Ritten"></div>
+            <div id="h2hStatus" class="h2h-status"></div>
+          </div>
 
-          <div
-            id="h2hPickerGrid"
-            class="h2h-picker-grid"
-            aria-label="Selecteer rijders (max 8)"
-          ></div>
+          <div class="h2h-heats-wrap">
+            <div id="h2hHeats" class="h2h-heats" aria-label="Ritten"></div>
+          </div>
         </section>
 
-        <section aria-label="Head to head results">
+        <section class="h2h-table-section" aria-label="Comparison table">
           <div class="h2h-table-wrap">
-            <table class="h2h-table">
+            <table class="h2h-table" aria-label="Head to head table">
               <thead>
                 <tr>
-                  <th>Rijder</th>
-                  <th class="h2h-col-small">Land</th>
+                  <th class="h2h-col-name">NAME</th>
+                  <th class="h2h-col-land">LAND</th>
                   <th class="h2h-col-small">CAN 1</th>
                   <th class="h2h-col-small">CAN 2</th>
                   <th class="h2h-col-small">POL</th>
-                  <th class="h2h-col-small">Overall</th>
+                  <th class="h2h-col-small">OVERALL</th>
                   <th class="h2h-col-small">WT</th>
-                  <th class="h2h-col-time">Time</th>
+                  <th class="h2h-col-time">TIME</th>
                 </tr>
               </thead>
               <tbody id="h2hBody"></tbody>
             </table>
           </div>
-          <p id="h2hTableTitle" class="h2h-status" style="margin-top: 0.65rem"></p>
+
+          <div id="h2hFooter" class="h2h-footer"></div>
         </section>
+
+        <!-- Single floating suggestion panel, anchored to active input -->
+        <div id="h2hSuggest" class="h2h-suggest" aria-label="Suggestions"></div>
       </section>
     </main>
   </body>
