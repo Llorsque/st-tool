@@ -9,9 +9,9 @@
 
 *{ box-sizing: border-box; }
 
-/* Breder canvas zodat 5 ritten naast elkaar passen zonder horizontale scrollbar */
+/* Breder canvas zodat 5 ritten zonder horizontale scrollbar passen */
 .h2h-layout{
-  max-width: 1500px; /* was 1220 */
+  max-width: 1500px; /* breder dan voorheen */
   margin: 0 auto;
   padding: 24px 18px 36px;
   font-family: "Archivo", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -19,11 +19,32 @@
   position: relative;
 }
 
+.h2h-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom: 14px;
+}
+
+.h2h-title{
+  font-size: clamp(26px, 3vw, 42px);
+  line-height: 1.08;
+  margin: 6px 0 10px;
+  letter-spacing: -0.02em;
+}
+
+.h2h-subtitle{
+  margin: 0;
+  color: var(--h2h-muted);
+  max-width: 100ch;
+}
+
 .h2h-controls{
   background: linear-gradient(180deg, rgba(82,232,232,.08), rgba(255,255,255,.02));
   border: 1px solid var(--h2h-border);
   border-radius: 18px;
-  padding: 14px 14px 12px;
+  padding: 14px 14px 10px;
   box-shadow: var(--h2h-shadow);
   margin: 14px 0 16px;
 }
@@ -36,12 +57,50 @@
   justify-content: flex-start;
 }
 
+/* --- Buttons/tabs: terug naar oude styling --- */
+.h2h-toggle{
+  display:inline-flex;
+  background: rgba(0,0,0,.22);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  overflow:hidden;
+  flex: 0 0 auto;
+}
+.h2h-toggle button{
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,.78);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.h2h-toggle button.is-active{
+  background: rgba(82,232,232,.16);
+  color: rgba(255,255,255,.95);
+}
+
 .h2h-tabs{
   display:flex;
   gap: 8px;
   flex-wrap: wrap;
   flex: 1 1 auto;
   justify-content: center;
+}
+
+.h2h-tab{
+  border-radius: 999px;
+  border: 1px solid rgba(82,232,232,.30);
+  background: rgba(0,0,0,.18);
+  color: rgba(255,255,255,.86);
+  padding: 10px 12px;
+  cursor:pointer;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+.h2h-tab.is-active{
+  background: rgba(82,232,232,.16);
+  border-color: rgba(82,232,232,.48);
 }
 
 .h2h-savebar{
@@ -51,12 +110,36 @@
   margin-left: auto;
 }
 
+.h2h-btn{
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor:pointer;
+  border: 1px solid rgba(82,232,232,.40);
+  background: rgba(82,232,232,.12);
+  color: var(--h2h-text);
+  white-space: nowrap;
+}
+.h2h-btn:hover{ background: rgba(82,232,232,.16); }
+.h2h-btn:active{ transform: translateY(1px); }
+.h2h-btn-ghost{
+  border-color: rgba(255,255,255,.25);
+  background: rgba(255,255,255,.06);
+}
+
+.h2h-savestate{
+  color: rgba(255,255,255,.70);
+  font-size: 13px;
+  min-width: 140px;
+}
+
+/* --- Heatbar: netjes uitgelijnd, zoals eerder --- */
 .h2h-heatbar{
   margin-top: 12px;
   display:flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items:center;
+  align-items: center;
 }
 
 .h2h-label{
@@ -71,7 +154,23 @@
   display:flex;
   gap: 8px;
   flex-wrap: nowrap;
-  align-items:center;
+  align-items: center;
+}
+
+.h2h-heatbtn{
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.18);
+  color: rgba(255,255,255,.86);
+  padding: 8px 10px;
+  cursor:pointer;
+  font-weight: 800;
+  min-width: 36px;
+  text-align: center;
+}
+.h2h-heatbtn.is-active{
+  background: rgba(82,232,232,.16);
+  border-color: rgba(82,232,232,.48);
 }
 
 .h2h-status{
@@ -82,27 +181,26 @@
   min-width: 240px;
 }
 
-/* BELANGRIJK: geen scrollbalk in het ritten-blok */
+/* --- Ritten: GEEN horizontale scroll, altijd passend in 5 kolommen --- */
 .h2h-heats-wrap{
   margin-top: 12px;
-  overflow: visible;        /* was auto */
-  padding-bottom: 0;        /* scrollbar ruimte weg */
+  overflow: visible;   /* geen scrollbar */
+  padding-bottom: 0;
 }
 
 .h2h-heats{
   display:grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr)); /* 5 kolommen die altijd passen */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
-  min-width: 0; /* voorkomt overflow */
+  min-width: 0;
 }
 
-/* Cards iets compacter zodat 5x past op minder brede schermen */
 .h2h-heat{
   border-radius: 16px;
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(0,0,0,.18);
-  padding: 10px;
+  padding: 10px; /* iets compacter zodat alles past */
   box-shadow: 0 10px 24px rgba(0,0,0,.25);
   min-width: 0;
 }
@@ -111,7 +209,7 @@
   display:flex;
   align-items:center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .h2h-heattitle{
@@ -147,6 +245,11 @@
   min-width: 0;
 }
 
+.h2h-slot.is-active{
+  border-color: rgba(82,232,232,.55);
+  box-shadow: 0 0 0 4px rgba(82,232,232,.10);
+}
+
 .h2h-slot input{
   flex: 1 1 auto;
   min-width: 0;
@@ -166,19 +269,122 @@
   font-weight: 700;
 }
 
-/* Zorg dat de 5 kolommen ook op iets smalle schermen nog netjes blijven zonder scroll:
-   we maken de cards smaller door font/spacing iets compacter. */
-@media (max-width: 1350px){
-  .h2h-layout{ max-width: 1400px; }
-  .h2h-slot{ padding: 7px 9px; }
-  .h2h-heat{ padding: 9px; }
-  .h2h-slots{ gap: 7px; }
+.h2h-clear{
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: rgba(255,255,255,.70);
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 10px;
+  flex: 0 0 auto;
 }
 
-/* Als het scherm écht te smal is, gaan we wél naar 3/1 kolommen — maar dan is er ook geen horizontale scrollbar. */
+.h2h-clear:hover{
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.92);
+}
+
+/* Table (ongewijzigd) */
+.h2h-table-wrap{
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid var(--h2h-border);
+  background: rgba(255,255,255,.02);
+  box-shadow: var(--h2h-shadow);
+}
+
+.h2h-table{
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.h2h-table thead th{
+  position: sticky;
+  top: 0;
+  background: rgba(10,14,28,.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+  padding: 12px 12px;
+  text-align: left;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: rgba(255,255,255,.78);
+  z-index: 1;
+}
+
+.h2h-table tbody td{
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  vertical-align: top;
+}
+
+.h2h-table tbody tr:nth-child(2n) td{
+  background: rgba(255,255,255,.02);
+}
+
+.h2h-col-name{ width: 340px; }
+.h2h-col-land{ width: 120px; }
+.h2h-col-small{ width: 110px; }
+.h2h-col-time{ width: 160px; }
+
+.h2h-footer{
+  margin-top: 10px;
+  color: rgba(255,255,255,.65);
+  font-size: 13px;
+}
+
+/* Suggest */
+.h2h-suggest{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 360px;
+  max-height: 260px;
+  overflow: auto;
+  display:none;
+  background: rgba(10,14,28,.96);
+  border: 1px solid rgba(82,232,232,.25);
+  border-radius: 14px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  z-index: 50;
+}
+
+.h2h-suggest.is-open{ display:block; }
+
+.h2h-suggest-item{
+  padding: 10px 12px;
+  cursor:pointer;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.h2h-suggest-item:hover{ background: rgba(255,255,255,.06); }
+
+.h2h-suggest-item.is-disabled{
+  opacity: .40;
+  cursor: not-allowed;
+}
+
+.h2h-suggest-main{
+  font-weight: 900;
+}
+
+.h2h-suggest-sub{
+  margin-top: 2px;
+  color: rgba(255,255,255,.70);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+
+/* Responsive: op kleinere schermen schuift het naar 3/1 kolommen (zonder horizontale scrollbar) */
 @media (max-width: 1100px){
   .h2h-heats{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 760px){
   .h2h-heats{ grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .h2h-savebar{ margin-left: 0; }
 }
