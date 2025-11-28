@@ -1,6 +1,10 @@
-/* optioneel: maak OS/WK kolommen iets compacter en multi-line netjes */
+/* OS / WK columns styling */
 .h2h-col-os, .h2h-col-wk{
   white-space: nowrap;
   line-height: 1.25;
-  font-weight: 800;
+  font-weight: 900;
+}
+/* Make headers align with existing style */
+th.h2h-col-os, th.h2h-col-wk{
+  text-align: left;
 }

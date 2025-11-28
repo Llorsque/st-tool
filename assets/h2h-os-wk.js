@@ -1,21 +1,16 @@
 /**
- * Head-to-Head: voeg OS & WK kolommen toe (na WT) op basis van lokaal opgeslagen champions-data.
+ * Head-to-Head OS/WK columns (robust).
+ * - Inserts OS and WK columns immediately after WT.
+ * - Fills OS and WK based on Champions data saved by the "Bewerk" popup pages.
  *
- * Data bronnen (localStorage):
- *  - World Champions:   shorttrack_champions_world_v1
- *  - Olympic Champions: shorttrack_champions_olympic_v1
+ * Storage keys (from champions-editor.js):
+ *   - shorttrack_champions_world_v1
+ *   - shorttrack_champions_olympic_v1
  *
- * Verwacht state-structuur (zoals champions-editor.js):
- *  {
- *    men:   { "500": [ {year, gold:{name,land}, silver:{...}, bronze:{...}}, ... ], ... },
- *    women: { ... },
- *    mixed: { "mixed": [ ... ] },
- *    meta: { updatedAt: "..." }
- *  }
- *
- * Integratie:
- *  - Zorg dat dit script geladen wordt op de Head-to-Head pagina.
- *  - Als je al een globale app.js hebt die op elke pagina laadt, kun je dit daar ook includen.
+ * Output format:
+ *   1 (25)
+ *   2 (22)
+ * (multiple lines if multiple medals)
  */
 (function () {
   const WORLD_KEY = "shorttrack_champions_world_v1";
@@ -25,13 +20,26 @@
     try { return JSON.parse(raw); } catch { return fallback; }
   }
 
-  function normName(s) {
-    return String(s ?? "")
+  function stripDiacritics(s) {
+    try { return String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+    catch { return String(s ?? ""); }
+  }
+
+  function cleanName(s) {
+    return stripDiacritics(String(s ?? ""))
       .trim()
       .toUpperCase()
-      .replace(/\s+/g, " ")
-      .replace(/[’'".]/g, "")
-      .replace(/-/g, " ");
+      .replace(/[’'".()]/g, "")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ");
+  }
+
+  function tokenKey(s) {
+    const clean = cleanName(s);
+    if (!clean) return "";
+    const toks = clean.split(" ").filter(Boolean);
+    toks.sort();
+    return toks.join(" ");
   }
 
   function yyFromYear(y) {
@@ -39,29 +47,28 @@
     if (!s) return "";
     const m = s.match(/\d{2,4}/);
     if (!m) return "";
-    const n = m[0];
-    return n.slice(-2); // "2025" -> "25", "05" -> "05"
+    return m[0].slice(-2);
   }
 
   function escapeHtml(str) {
     return String(str ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
   function getActiveGender() {
-    // Meest waarschijnlijk: toggle knoppen met "is-active"
-    const btn = document.querySelector(".h2h-toggle button.is-active, .toggle button.is-active, [data-gender].is-active");
-    if (btn) {
-      const t = btn.textContent.trim().toLowerCase();
+    // Try toggles/buttons with active class
+    const active =
+      document.querySelector(".h2h-toggle button.is-active") ||
+      document.querySelector("[data-gender].is-active") ||
+      Array.from(document.querySelectorAll("button.is-active")).find(b => /men|women/i.test(b.textContent || ""));
+
+    if (active) {
+      const t = (active.textContent || "").toLowerCase();
       if (t.includes("women")) return "women";
       if (t.includes("men")) return "men";
     }
 
-    // Fallback: statusregel bevat "Men" / "Women"
     const status = (document.querySelector(".h2h-status")?.textContent || "").toLowerCase();
     if (status.includes("women")) return "women";
     if (status.includes("men")) return "men";
@@ -69,10 +76,12 @@
   }
 
   function getActiveDistanceKey() {
-    // Afstand-knoppen met .is-active
-    const b = document.querySelector(".h2h-tab.is-active, .tab.is-active, [data-distance].is-active");
-    const label = (b ? b.textContent : (document.querySelector(".h2h-status")?.textContent || "")).toLowerCase();
+    const active =
+      document.querySelector(".h2h-tab.is-active") ||
+      document.querySelector("[data-distance].is-active") ||
+      Array.from(document.querySelectorAll("button.is-active")).find(b => /(500|1000|1500|relay|mixed)/i.test(b.textContent || ""));
 
+    const label = ((active ? active.textContent : document.querySelector(".h2h-status")?.textContent) || "").toLowerCase();
     if (label.includes("500")) return "500";
     if (label.includes("1000")) return "1000";
     if (label.includes("1500")) return "1500";
@@ -84,117 +93,135 @@
   function loadBucket(storageKey, gender, distKey) {
     const st = safeJsonParse(localStorage.getItem(storageKey), null);
     if (!st) return [];
-    if (distKey === "mixed") return (st.mixed && st.mixed.mixed) ? st.mixed.mixed : [];
-    const g = st[gender];
-    if (!g) return [];
-    return Array.isArray(g[distKey]) ? g[distKey] : [];
+    if (distKey === "mixed") return Array.isArray(st?.mixed?.mixed) ? st.mixed.mixed : [];
+    return Array.isArray(st?.[gender]?.[distKey]) ? st[gender][distKey] : [];
   }
 
-  function getMedalLinesForName(rows, targetName) {
-    const target = normName(targetName);
-    if (!target) return [];
-
-    const found = [];
+  function buildMedalMap(rows) {
+    const map = new Map(); // tokenKey -> [{rank, yy, yearNum}]
     for (const r of rows || []) {
-      const yearYY = yyFromYear(r?.year);
+      const yy = yyFromYear(r?.year);
+      const yearNum = parseInt(String(r?.year ?? "").replace(/\D/g, ""), 10);
       const medals = [
         { slot: "gold", rank: 1 },
         { slot: "silver", rank: 2 },
         { slot: "bronze", rank: 3 },
       ];
       for (const m of medals) {
-        const nm = normName(r?.[m.slot]?.name);
-        if (!nm) continue;
-        if (nm === target) {
-          found.push({ yearYY, yearRaw: r?.year, rank: m.rank });
-        }
+        const nm = r?.[m.slot]?.name;
+        const key = tokenKey(nm);
+        if (!key) continue;
+        const arr = map.get(key) || [];
+        arr.push({ rank: m.rank, yy, yearNum: Number.isNaN(yearNum) ? -1 : yearNum });
+        map.set(key, arr);
       }
     }
 
-    // sort: newest year first, then rank (1 before 2 before 3)
-    found.sort((a, b) => {
-      const ya = parseInt(String(a.yearRaw ?? "").replace(/\D/g, ""), 10);
-      const yb = parseInt(String(b.yearRaw ?? "").replace(/\D/g, ""), 10);
-      if (!Number.isNaN(ya) && !Number.isNaN(yb) && ya !== yb) return yb - ya;
-      return a.rank - b.rank;
-    });
+    for (const [k, list] of map.entries()) {
+      list.sort((a, b) => {
+        if (a.yearNum !== b.yearNum) return b.yearNum - a.yearNum;
+        return a.rank - b.rank;
+      });
+    }
 
-    return found.map(x => x.yearYY ? `${x.rank} (${x.yearYY})` : `${x.rank}`);
+    return map;
   }
 
-  function findHeadToHeadTable() {
-    // Zoek een table met headers WT + TIME (robust)
+  function rowHasHeaders(rowEl, needed) {
+    const cells = Array.from(rowEl.children || []);
+    const labels = cells.map(c => (c.textContent || "").trim().toUpperCase());
+    return needed.every(x => labels.includes(x));
+  }
+
+  function findH2HTable() {
+    // Prefer a table with NAME + WT + TIME headers (as in your screenshot)
     const tables = Array.from(document.querySelectorAll("table"));
     for (const t of tables) {
-      const ths = Array.from(t.querySelectorAll("thead th")).map(th => th.textContent.trim().toUpperCase());
-      if (ths.includes("WT") && ths.includes("TIME")) return t;
+      // Find a likely header row: either thead tr or first tr
+      const headerRow =
+        t.querySelector("thead tr") ||
+        Array.from(t.querySelectorAll("tr")).find(tr => rowHasHeaders(tr, ["WT"])) ||
+        t.querySelector("tr");
+      if (!headerRow) continue;
+      const labels = Array.from(headerRow.children).map(c => (c.textContent || "").trim().toUpperCase());
+      if (labels.includes("WT") && labels.includes("TIME")) return { table: t, headerRow };
     }
+
+    // Fallback: any element with role=table
+    const roles = Array.from(document.querySelectorAll('[role="table"]'));
+    for (const r of roles) {
+      const headerRow = r.querySelector('[role="row"]') || r.firstElementChild;
+      if (!headerRow) continue;
+      const labels = Array.from(headerRow.children).map(c => (c.textContent || "").trim().toUpperCase());
+      if (labels.includes("WT") && labels.includes("TIME")) return { table: r, headerRow };
+    }
+
     return null;
   }
 
-  function ensureHeaders(table) {
-    const headRow = table.querySelector("thead tr");
-    if (!headRow) return;
+  function ensureOSWKHeaders(headerRow) {
+    const cells = Array.from(headerRow.children);
+    const labels = cells.map(c => (c.textContent || "").trim().toUpperCase());
 
-    const ths = Array.from(headRow.children);
-    const labels = ths.map(th => th.textContent.trim().toUpperCase());
-
-    // Al aanwezig?
     if (labels.includes("OS") && labels.includes("WK")) return;
 
     const wtIndex = labels.indexOf("WT");
     if (wtIndex === -1) return;
 
-    const thOS = document.createElement("th");
-    thOS.textContent = "OS";
-    const thWK = document.createElement("th");
-    thWK.textContent = "WK";
+    const tag = cells[0]?.tagName?.toLowerCase() || "th";
+    const makeCell = (txt) => {
+      const el = document.createElement(tag);
+      el.textContent = txt;
+      el.classList.add("h2h-col-" + txt.toLowerCase());
+      return el;
+    };
 
-    // Insert na WT (dus op wtIndex+1 & +2)
-    headRow.insertBefore(thOS, ths[wtIndex + 1] || null);
-    headRow.insertBefore(thWK, ths[wtIndex + 2] || null);
+    const os = makeCell("OS");
+    const wk = makeCell("WK");
+
+    headerRow.insertBefore(os, headerRow.children[wtIndex + 1] || null);
+    headerRow.insertBefore(wk, headerRow.children[wtIndex + 2] || null);
   }
 
-  function ensureBodyCells(table) {
-    const headRow = table.querySelector("thead tr");
-    const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
-    if (!headRow) return;
-
-    const labels = Array.from(headRow.children).map(th => th.textContent.trim().toUpperCase());
-    const wtIndex = labels.indexOf("WT");
-    const osIndex = labels.indexOf("OS");
-    const wkIndex = labels.indexOf("WK");
-
+  function ensureOSWKBody(table, headerRow) {
+    const headerLabels = Array.from(headerRow.children).map(c => (c.textContent || "").trim().toUpperCase());
+    const wtIndex = headerLabels.indexOf("WT");
+    const osIndex = headerLabels.indexOf("OS");
+    const wkIndex = headerLabels.indexOf("WK");
     if (wtIndex === -1 || osIndex === -1 || wkIndex === -1) return;
+
+    const bodyRows = table.querySelectorAll("tbody tr").length
+      ? Array.from(table.querySelectorAll("tbody tr"))
+      : Array.from(table.querySelectorAll("tr")).slice(1); // fallback if no tbody
 
     for (const tr of bodyRows) {
       const tds = Array.from(tr.children);
-      // Als er al cells zijn op de OS/WK index, skip insert
-      if (tds[osIndex] && tds[wkIndex]) continue;
+      if (!tds.length) continue;
 
-      // Voeg 2 td's toe na WT
-      const tdOS = document.createElement("td");
+      // If already has OS/WK in correct positions, skip
+      const hasOS = !!tds[osIndex];
+      const hasWK = !!tds[wkIndex];
+      if (hasOS && hasWK) continue;
+
+      const cellTag = tds[0]?.tagName?.toLowerCase() || "td";
+
+      const tdOS = document.createElement(cellTag);
       tdOS.className = "h2h-col-os";
       tdOS.textContent = "-";
-      const tdWK = document.createElement("td");
+
+      const tdWK = document.createElement(cellTag);
       tdWK.className = "h2h-col-wk";
       tdWK.textContent = "-";
 
-      tr.insertBefore(tdOS, tds[wtIndex + 1] || null);
-      // after inserting OS, indices shift by +1 for rest of nodes beyond insertion point
-      const tds2 = Array.from(tr.children);
-      tr.insertBefore(tdWK, tds2[wtIndex + 2] || null);
+      tr.insertBefore(tdOS, tr.children[wtIndex + 1] || null);
+      tr.insertBefore(tdWK, tr.children[wtIndex + 2] || null);
     }
   }
 
-  function fillOSWK(table) {
-    const headRow = table.querySelector("thead tr");
-    if (!headRow) return;
-
-    const labels = Array.from(headRow.children).map(th => th.textContent.trim().toUpperCase());
+  function fillOSWK(table, headerRow) {
+    const labels = Array.from(headerRow.children).map(c => (c.textContent || "").trim().toUpperCase());
     const osIndex = labels.indexOf("OS");
     const wkIndex = labels.indexOf("WK");
-
     if (osIndex === -1 || wkIndex === -1) return;
 
     const gender = getActiveGender();
@@ -203,62 +230,68 @@
     const worldRows = loadBucket(WORLD_KEY, gender, distKey);
     const olympicRows = loadBucket(OLYMPIC_KEY, gender, distKey);
 
-    const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+    const wkMap = buildMedalMap(worldRows);
+    const osMap = buildMedalMap(olympicRows);
+
+    const bodyRows = table.querySelectorAll("tbody tr").length
+      ? Array.from(table.querySelectorAll("tbody tr"))
+      : Array.from(table.querySelectorAll("tr")).slice(1);
+
     for (const tr of bodyRows) {
       const tds = Array.from(tr.children);
       if (!tds.length) continue;
 
-      // Neem naam uit eerste kolom (werkt voor rijders én teams/landen)
       const name = (tds[0]?.textContent || "").trim();
+      const key = tokenKey(name);
 
-      const osLines = getMedalLinesForName(olympicRows, name);
-      const wkLines = getMedalLinesForName(worldRows, name);
+      const os = (key && osMap.has(key)) ? osMap.get(key) : null;
+      const wk = (key && wkMap.has(key)) ? wkMap.get(key) : null;
 
-      const osCell = tds[osIndex];
-      const wkCell = tds[wkIndex];
-      if (osCell) osCell.innerHTML = osLines.length ? osLines.map(escapeHtml).join("<br>") : "-";
-      if (wkCell) wkCell.innerHTML = wkLines.length ? wkLines.map(escapeHtml).join("<br>") : "-";
+      const osLines = os ? os.map(x => x.yy ? `${x.rank} (${x.yy})` : `${x.rank}`) : [];
+      const wkLines = wk ? wk.map(x => x.yy ? `${x.rank} (${x.yy})` : `${x.rank}`) : [];
+
+      if (tds[osIndex]) tds[osIndex].innerHTML = osLines.length ? osLines.map(escapeHtml).join("<br>") : "-";
+      if (tds[wkIndex]) tds[wkIndex].innerHTML = wkLines.length ? wkLines.map(escapeHtml).join("<br>") : "-";
     }
   }
 
-  let raf = null;
-  function scheduleRun() {
-    if (raf) cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(() => {
-      raf = null;
-      const table = findHeadToHeadTable();
-      if (!table) return;
-      ensureHeaders(table);
-      ensureBodyCells(table);
-      fillOSWK(table);
-    });
+  function runOnce() {
+    const found = findH2HTable();
+    if (!found) return false;
+    const { table, headerRow } = found;
+    ensureOSWKHeaders(headerRow);
+    // headerRow changed after insertion: re-select it (safest)
+    const hdr = (table.querySelector("thead tr") || headerRow);
+    ensureOSWKBody(table, hdr);
+    fillOSWK(table, hdr);
+    return true;
   }
 
-  function installObservers() {
-    const table = findHeadToHeadTable();
-    if (!table) return;
-
-    // Als table verandert door nieuwe selectie -> rerun
-    const obs = new MutationObserver(() => scheduleRun());
-    obs.observe(table, { childList: true, subtree: true });
-
-    // Status/tabs kunnen ook wijzigen zonder table rebuild
-    const status = document.querySelector(".h2h-status") || document.body;
-    const obs2 = new MutationObserver(() => scheduleRun());
-    obs2.observe(status, { childList: true, subtree: true, characterData: true });
-
-    // Als champions-data opgeslagen wordt in andere tab: storage event
-    window.addEventListener("storage", (e) => {
-      if (e.key === WORLD_KEY || e.key === OLYMPIC_KEY) scheduleRun();
+  let running = false;
+  function schedule() {
+    if (running) return;
+    running = true;
+    requestAnimationFrame(() => {
+      running = false;
+      runOnce();
     });
   }
 
   function boot() {
-    // Run en probeer nog 1x na korte delay (voor SPA render)
-    scheduleRun();
-    setTimeout(scheduleRun, 300);
-    setTimeout(scheduleRun, 1200);
-    installObservers();
+    // Run multiple times to catch late renders
+    schedule();
+    setTimeout(schedule, 200);
+    setTimeout(schedule, 800);
+    setTimeout(schedule, 2000);
+
+    // Observe DOM changes globally so switching distance/gender refreshes columns
+    const obs = new MutationObserver(() => schedule());
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    // Refresh when champions lists are saved in other tab/page
+    window.addEventListener("storage", (e) => {
+      if (e.key === WORLD_KEY || e.key === OLYMPIC_KEY) schedule();
+    });
   }
 
   document.addEventListener("DOMContentLoaded", boot);
