@@ -1,0 +1,6 @@
+/* optioneel: maak OS/WK kolommen iets compacter en multi-line netjes */
+.h2h-col-os, .h2h-col-wk{
+  white-space: nowrap;
+  line-height: 1.25;
+  font-weight: 800;
+}
