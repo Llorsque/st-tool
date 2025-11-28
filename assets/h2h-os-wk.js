@@ -1,19 +1,9 @@
 /**
- * Head-to-Head OS/WK columns (v3) — WOMEN FIX
+ * Head-to-Head OS/WK columns (v4) — distance key matching fix
  *
- * Why v3:
- * - In praktijk werd bij Women vaak niets gevonden omdat:
- *   1) Champions-data soms per ongeluk onder "men" werd opgeslagen, of
- *   2) Naamvelden bevatten soms extra ", CAN" / " CAN" in de naam.
- *
- * Fixes:
- * - Gender-agnostic lookup: voor 500/1000/1500/relay zoeken we in BOTH men + women buckets.
- * - Robuuste naam-normalisatie: verwijdert ook komma's en strip trailing landcodes
- *   op basis van landcodes uit (a) de huidige Head-to-Head tabel en (b) champions land velden.
- *
- * Result:
- * - OS & WK kolommen altijd direct na WT.
- * - Vulling volgens: 1 (25) / 2 (22) etc, meerdere regels indien meerdere medailles.
+ * - Match OS/WK strictly to the selected distance (500/1000/1500/relay/mixed).
+ * - Support localStorage key variants ("500m" vs "500", "Mixed Relay", etc.).
+ * - OS/WK inserted immediately after WT.
  */
 (function () {
   const WORLD_KEY = "shorttrack_champions_world_v1";
@@ -30,7 +20,7 @@
     return stripDiacritics(String(s ?? ""))
       .trim()
       .toUpperCase()
-      .replace(/[’'"().,]/g, "")   // remove punctuation incl comma
+      .replace(/[’'"().,]/g, "")
       .replace(/-/g, " ")
       .replace(/\s+/g, " ");
   }
@@ -57,6 +47,7 @@
         .find(b => /(500|1000|1500|relay|mixed)/i.test(b.textContent || ""));
 
     const label = ((active ? active.textContent : document.querySelector(".h2h-status")?.textContent) || "").toLowerCase();
+
     if (label.includes("500")) return "500";
     if (label.includes("1000")) return "1000";
     if (label.includes("1500")) return "1500";
@@ -69,14 +60,38 @@
     return safeJsonParse(localStorage.getItem(storageKey), null);
   }
 
-  function getBuckets(st, distKey) {
-    // Return an array of rows merged across genders when applicable
+  function possibleKeysForDistance(distKey){
+    if (distKey === "500") return ["500", "500m", "500M", "500 m"];
+    if (distKey === "1000") return ["1000", "1000m", "1000M", "1000 m"];
+    if (distKey === "1500") return ["1500", "1500m", "1500M", "1500 m"];
+    if (distKey === "relay") return ["relay", "Relay", "RELAY", "relay men", "relay women", "Relay Men", "Relay Women"];
+    if (distKey === "mixed") return ["mixed", "Mixed", "mixed relay", "Mixed Relay", "MIXED RELAY", "mixedRelay"];
+    return [distKey];
+  }
+
+  function getBucketByKeys(obj, keys){
+    for (const k of keys){
+      if (obj && Array.isArray(obj[k])) return obj[k];
+    }
+    return [];
+  }
+
+  function getBucketsStrict(st, distKey) {
     if (!st) return [];
-    if (distKey === "mixed") return Array.isArray(st?.mixed?.mixed) ? st.mixed.mixed : [];
-    const men = Array.isArray(st?.men?.[distKey]) ? st.men[distKey] : [];
-    const women = Array.isArray(st?.women?.[distKey]) ? st.women[distKey] : [];
-    // merge (dedupe not required)
-    return [...men, ...women];
+    const keys = possibleKeysForDistance(distKey);
+
+    if (distKey === "mixed") {
+      const mixedObj = st.mixed || {};
+      return getBucketByKeys(mixedObj, ["mixed", ...keys]);
+    }
+
+    const menObj = st.men || {};
+    const womenObj = st.women || {};
+
+    const menRows = getBucketByKeys(menObj, keys);
+    const womenRows = getBucketByKeys(womenObj, keys);
+
+    return [...menRows, ...womenRows];
   }
 
   function findH2HTable() {
@@ -108,26 +123,6 @@
     return set;
   }
 
-  function tokenKey(name, landSet) {
-    let clean = cleanText(name);
-    if (!clean) return "";
-
-    // If user typed "NAME CAN" or "NAME, CAN" into the name field, drop trailing land code if recognized
-    let toks = clean.split(" ").filter(Boolean);
-    if (toks.length >= 2) {
-      const last = toks[toks.length - 1];
-      if (landSet && landSet.has(last)) toks = toks.slice(0, -1);
-    }
-
-    // also handle accidental double last tokens like "CAN CAN"
-    while (toks.length >= 2 && landSet && landSet.has(toks[toks.length - 1])) {
-      toks.pop();
-    }
-
-    toks.sort();
-    return toks.join(" ");
-  }
-
   function buildLandSetFromChampions(rows) {
     const s = new Set();
     for (const r of rows || []) {
@@ -139,8 +134,23 @@
     return s;
   }
 
+  function tokenKey(name, landSet) {
+    let clean = cleanText(name);
+    if (!clean) return "";
+    let toks = clean.split(" ").filter(Boolean);
+
+    if (toks.length >= 2 && landSet) {
+      const last = toks[toks.length - 1];
+      if (landSet.has(last)) toks = toks.slice(0, -1);
+      while (toks.length >= 2 && landSet.has(toks[toks.length - 1])) toks.pop();
+    }
+
+    toks.sort();
+    return toks.join(" ");
+  }
+
   function buildMedalMap(rows, landSet) {
-    const map = new Map(); // key -> [{rank, yy, yearNum}]
+    const map = new Map();
     for (const r of rows || []) {
       const yy = yyFromYear(r?.year);
       const yearNum = parseInt(String(r?.year ?? "").replace(/\D/g, ""), 10);
@@ -150,17 +160,14 @@
         { slot: "bronze", rank: 3 },
       ];
       for (const m of medals) {
-        const nm = r?.[m.slot]?.name;
-        const key = tokenKey(nm, landSet);
+        const key = tokenKey(r?.[m.slot]?.name, landSet);
         if (!key) continue;
         const arr = map.get(key) || [];
         arr.push({ rank: m.rank, yy, yearNum: Number.isNaN(yearNum) ? -1 : yearNum });
         map.set(key, arr);
       }
     }
-    for (const [k, list] of map.entries()) {
-      list.sort((a, b) => (b.yearNum - a.yearNum) || (a.rank - b.rank));
-    }
+    for (const [k, list] of map.entries()) list.sort((a, b) => (b.yearNum - a.yearNum) || (a.rank - b.rank));
     return map;
   }
 
@@ -223,15 +230,14 @@
 
     const distKey = getActiveDistanceKey();
 
-    const worldState = loadState(WORLD_KEY);
-    const olympicState = loadState(OLYMPIC_KEY);
+    const worldRows = getBucketsStrict(loadState(WORLD_KEY), distKey);
+    const olympicRows = getBucketsStrict(loadState(OLYMPIC_KEY), distKey);
 
-    const worldRows = getBuckets(worldState, distKey);
-    const olympicRows = getBuckets(olympicState, distKey);
-
-    const landFromChampions = new Set([...buildLandSetFromChampions(worldRows), ...buildLandSetFromChampions(olympicRows)]);
-    const landFromTable = getLandCodesFromTable(table, headerRow);
-    const landSet = new Set([...landFromChampions, ...landFromTable]);
+    const landSet = new Set([
+      ...buildLandSetFromChampions(worldRows),
+      ...buildLandSetFromChampions(olympicRows),
+      ...getLandCodesFromTable(table, headerRow),
+    ]);
 
     const wkMap = buildMedalMap(worldRows, landSet);
     const osMap = buildMedalMap(olympicRows, landSet);
@@ -244,8 +250,7 @@
       const tds = Array.from(tr.children);
       if (!tds.length) continue;
 
-      const name = (tds[0]?.textContent || "").trim();
-      const key = tokenKey(name, landSet);
+      const key = tokenKey((tds[0]?.textContent || "").trim(), landSet);
 
       const osList = key ? (osMap.get(key) || null) : null;
       const wkList = key ? (wkMap.get(key) || null) : null;
