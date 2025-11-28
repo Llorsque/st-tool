@@ -1,9 +1,17 @@
 /**
- * Head-to-Head OS/WK columns (v4) — distance key matching fix
+ * Head-to-Head OS/WK columns (v6) — Relay gender distinction
  *
- * - Match OS/WK strictly to the selected distance (500/1000/1500/relay/mixed).
- * - Support localStorage key variants ("500m" vs "500", "Mixed Relay", etc.).
- * - OS/WK inserted immediately after WT.
+ * Request:
+ * - For Relay head-to-head: OS/WK must distinguish between MEN and WOMEN champions,
+ *   based on the Men/Women toggle.
+ * - For Mixed Relay: gender toggle does NOT matter.
+ *
+ * Implementation:
+ * - 500/1000/1500: merge across genders (tolerant if champions were saved under wrong gender).
+ * - RELAY: use selected gender strictly (men bucket for Men, women bucket for Women).
+ * - MIXED: use mixed bucket only.
+ *
+ * OS/WK inserted immediately after WT.
  */
 (function () {
   const WORLD_KEY = "shorttrack_champions_world_v1";
@@ -39,6 +47,33 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
+  function getActiveGender() {
+    const candidates = [
+      ".h2h-toggle button.is-active",
+      ".h2h-toggle button.active",
+      ".h2h-toggle button[aria-pressed='true']",
+      "[data-gender].is-active",
+      "[data-gender].active",
+      "[data-gender][aria-pressed='true']",
+    ];
+    for (const sel of candidates) {
+      const b = document.querySelector(sel);
+      if (b) {
+        const t = (b.textContent || "").toLowerCase();
+        if (t.includes("women") || t.includes("vrouwen")) return "women";
+        if (t.includes("men") || t.includes("mannen")) return "men";
+      }
+    }
+    const any = Array.from(document.querySelectorAll("button.is-active, button.active, button[aria-pressed='true']"))
+      .find(b => /men|women|mannen|vrouwen/i.test(b.textContent || ""));
+    if (any) {
+      const t = (any.textContent || "").toLowerCase();
+      if (t.includes("women") || t.includes("vrouwen")) return "women";
+      if (t.includes("men") || t.includes("mannen")) return "men";
+    }
+    return "men";
+  }
+
   function getActiveDistanceKey() {
     const active =
       document.querySelector(".h2h-tabs button.is-active, .h2h-tabs button.active, .h2h-tabs button[aria-pressed='true']")
@@ -61,37 +96,74 @@
   }
 
   function possibleKeysForDistance(distKey){
-    if (distKey === "500") return ["500", "500m", "500M", "500 m"];
-    if (distKey === "1000") return ["1000", "1000m", "1000M", "1000 m"];
-    if (distKey === "1500") return ["1500", "1500m", "1500M", "1500 m"];
+    if (distKey === "500") return ["500", "500m", "500M", "500 m", "500meter", "500 meter"];
+    if (distKey === "1000") return ["1000", "1000m", "1000M", "1000 m", "1000meter", "1000 meter"];
+    if (distKey === "1500") return ["1500", "1500m", "1500M", "1500 m", "1500meter", "1500 meter"];
     if (distKey === "relay") return ["relay", "Relay", "RELAY", "relay men", "relay women", "Relay Men", "Relay Women"];
     if (distKey === "mixed") return ["mixed", "Mixed", "mixed relay", "Mixed Relay", "MIXED RELAY", "mixedRelay"];
     return [distKey];
   }
 
-  function getBucketByKeys(obj, keys){
+  function getBucketByExactKeys(obj, keys){
     for (const k of keys){
       if (obj && Array.isArray(obj[k])) return obj[k];
     }
     return [];
   }
 
-  function getBucketsStrict(st, distKey) {
+  function keyMatchesDistance(k, distKey, gender) {
+    const s = String(k ?? "").toLowerCase().replace(/\s+/g, " ");
+    if (distKey === "500") return s.includes("500");
+    if (distKey === "1000") return s.includes("1000");
+    if (distKey === "1500") return s.includes("1500");
+    if (distKey === "mixed") return s.includes("mixed");
+    if (distKey === "relay") {
+      if (!s.includes("relay") || s.includes("mixed")) return false;
+      const hasMen = s.includes(" men") || s.includes("mannen") || s.endsWith("men");
+      const hasWomen = s.includes(" women") || s.includes("vrouwen") || s.endsWith("women");
+      if (hasMen && gender === "women") return false;
+      if (hasWomen && gender === "men") return false;
+      return true;
+    }
+    return false;
+  }
+
+  function scanBuckets(obj, distKey, gender) {
+    const scanned = [];
+    if (!obj) return scanned;
+    for (const k of Object.keys(obj)) {
+      if (keyMatchesDistance(k, distKey, gender) && Array.isArray(obj[k])) scanned.push(...obj[k]);
+    }
+    return scanned;
+  }
+
+  function getBucketsStrict(st, distKey, gender) {
     if (!st) return [];
     const keys = possibleKeysForDistance(distKey);
 
     if (distKey === "mixed") {
       const mixedObj = st.mixed || {};
-      return getBucketByKeys(mixedObj, ["mixed", ...keys]);
+      let rows = getBucketByExactKeys(mixedObj, ["mixed", ...keys]);
+      if (rows.length) return rows;
+      return scanBuckets(mixedObj, "mixed", "men");
+    }
+
+    if (distKey === "relay") {
+      const gObj = (gender === "women") ? (st.women || {}) : (st.men || {});
+      let rows = getBucketByExactKeys(gObj, keys);
+      if (rows.length) return rows;
+      return scanBuckets(gObj, "relay", gender);
     }
 
     const menObj = st.men || {};
     const womenObj = st.women || {};
 
-    const menRows = getBucketByKeys(menObj, keys);
-    const womenRows = getBucketByKeys(womenObj, keys);
+    const menRowsExact = getBucketByExactKeys(menObj, keys);
+    const womenRowsExact = getBucketByExactKeys(womenObj, keys);
+    let rows = [...menRowsExact, ...womenRowsExact];
+    if (rows.length) return rows;
 
-    return [...menRows, ...womenRows];
+    return [...scanBuckets(menObj, distKey, gender), ...scanBuckets(womenObj, distKey, gender)];
   }
 
   function findH2HTable() {
@@ -229,9 +301,10 @@
     if (osIndex === -1 || wkIndex === -1) return;
 
     const distKey = getActiveDistanceKey();
+    const gender = getActiveGender();
 
-    const worldRows = getBucketsStrict(loadState(WORLD_KEY), distKey);
-    const olympicRows = getBucketsStrict(loadState(OLYMPIC_KEY), distKey);
+    const worldRows = getBucketsStrict(loadState(WORLD_KEY), distKey, gender);
+    const olympicRows = getBucketsStrict(loadState(OLYMPIC_KEY), distKey, gender);
 
     const landSet = new Set([
       ...buildLandSetFromChampions(worldRows),
