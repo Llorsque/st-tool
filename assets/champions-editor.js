@@ -28,18 +28,25 @@
     const raw = localStorage.getItem(storageKey(pageType));
     const st = raw ? safeJsonParse(raw, null) : null;
     if (!st) return defaultState();
+
+    const canon = canonicalizeState(st);
+
     const def = defaultState();
-    def.men = { ...def.men, ...(st.men || {}) };
-    def.women = { ...def.women, ...(st.women || {}) };
-    def.mixed = { ...def.mixed, ...(st.mixed || {}) };
-    def.meta = { updatedAt: st?.meta?.updatedAt || null };
+    def.men = { ...def.men, ...(canon.men || {}) };
+    def.women = { ...def.women, ...(canon.women || {}) };
+    def.mixed = { ...def.mixed, ...(canon.mixed || {}) };
+    def.meta = { updatedAt: canon?.meta?.updatedAt || null };
+
+    // Rewrite once to prevent future mismatches (e.g. Men 1500 not showing in H2H).
+    try { localStorage.setItem(storageKey(pageType), JSON.stringify(canon)); } catch {}
     return def;
   }
 
   function saveState(pageType, state){
-    state.meta = state.meta || {};
-    state.meta.updatedAt = nowIso();
-    localStorage.setItem(storageKey(pageType), JSON.stringify(state));
+    const canon = canonicalizeState(state);
+    canon.meta = canon.meta || {};
+    canon.meta.updatedAt = nowIso();
+    localStorage.setItem(storageKey(pageType), JSON.stringify(canon));
   }
 
   function el(tag, cls, text){
@@ -196,6 +203,178 @@
     const name = normalize(parts.join(",").trim());
     return { name, land };
   }
+
+  // --- Data migration / canonicalization ------------------------------------
+  // Over time there may be older localStorage shapes (or partially edited shapes).
+  // We normalize everything into the canonical structure:
+  // {
+  //   men: { "500": [], "1000": [], "1500": [], "relay": [] },
+  //   women: { ... },
+  //   mixed: { mixed: [] },
+  //   meta: { updatedAt: ISO-string|null }
+  // }
+  function normalizeDistanceKey(key){
+    const s = normalize(key).toLowerCase();
+    if (!s) return "";
+    if (s.includes("mixed")) return "mixed";
+    if (s.includes("relay")) return "relay";
+    if (s.includes("1500")) return "1500";
+    if (s.includes("1000")) return "1000";
+    if (s.includes("500")) return "500";
+    return s;
+  }
+
+  function pick(obj, keys){
+    if (!obj || typeof obj !== "object") return undefined;
+    const lower = {};
+    for (const k of Object.keys(obj)) lower[String(k).toLowerCase()] = obj[k];
+    for (const k of keys){
+      const v = lower[String(k).toLowerCase()];
+      if (v != null) return v;
+    }
+    return undefined;
+  }
+
+  function cleanKey(s){
+    return normalize(s).toUpperCase().replace(/[’'"().,]/g, "").replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function canonicalizeMedal(val){
+    // Accepts: {name, land} | string "Name, LAND" | [name, land] | {value,label,fullName,...}
+    if (!val) return { name: "", land: "" };
+
+    if (Array.isArray(val)){
+      const name = normalize(val[0]);
+      const land = normalize(val[1]).toUpperCase();
+      return { name, land };
+    }
+
+    if (typeof val === "string"){
+      const o = unpack(val);
+      return { name: normalize(o.name), land: normalize(o.land).toUpperCase() };
+    }
+
+    if (typeof val === "object"){
+      const name = normalize(pick(val, ["name","naam","skater","rider","value","label","text","fullname","full_name"]) || "");
+      const land = normalize(pick(val, ["land","country","nation","code"]) || "").toUpperCase();
+      if (!name && !land) return { name: "", land: "" };
+      return { name, land };
+    }
+
+    return { name: normalize(String(val)), land: "" };
+  }
+
+  function canonicalizeRow(r){
+    const row = (r && typeof r === "object") ? { ...r } : {};
+    if (!row._id) row._id = typeof cryptoId === "function" ? cryptoId() : String(Date.now());
+
+    // year/place can exist in multiple keys
+    row.year = normalize(pick(row, ["year","jaar","season","date"]) || row.year || "");
+    row.place = normalize(pick(row, ["place","location","venue","city","event"]) || row.place || "");
+
+    // medal variants
+    const gold = row.gold ?? pick(row, ["gold","1","first","1st","winner"]);
+    const silver = row.silver ?? pick(row, ["silver","2","second","2nd"]);
+    const bronze = row.bronze ?? pick(row, ["bronze","3","third","3rd"]);
+
+    // flat variants
+    const goldFlat = (pick(row, ["goldname","gold_name","goldskater","goldrider"]) || "") + (pick(row, ["goldland","gold_land","goldcountry"]) ? (", " + pick(row, ["goldland","gold_land","goldcountry"])) : "");
+    const silverFlat = (pick(row, ["silvername","silver_name","silverskater","silverrider"]) || "") + (pick(row, ["silverland","silver_land","silvercountry"]) ? (", " + pick(row, ["silverland","silver_land","silvercountry"])) : "");
+    const bronzeFlat = (pick(row, ["bronzename","bronze_name","bronzeskaters","bronzerider"]) || "") + (pick(row, ["bronzeland","bronze_land","bronzecountry"]) ? (", " + pick(row, ["bronzeland","bronze_land","bronzecountry"])) : "");
+
+    row.gold = canonicalizeMedal(gold || (goldFlat.trim() ? goldFlat : null));
+    row.silver = canonicalizeMedal(silver || (silverFlat.trim() ? silverFlat : null));
+    row.bronze = canonicalizeMedal(bronze || (bronzeFlat.trim() ? bronzeFlat : null));
+
+    // discard any leftover alternative fields to keep storage clean (optional, but avoids drift)
+    return {
+      _id: row._id,
+      year: row.year,
+      place: row.place,
+      gold: row.gold,
+      silver: row.silver,
+      bronze: row.bronze,
+    };
+  }
+
+  function canonicalizeState(st){
+    const out = defaultState();
+    if (!st || typeof st !== "object") return out;
+
+    out.meta.updatedAt = st?.meta?.updatedAt || st?.updatedAt || null;
+
+    function ensureArr(v){
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object" && Array.isArray(v.rows)) return v.rows;
+      if (v && typeof v === "object" && Array.isArray(v.data)) return v.data;
+      return [];
+    }
+
+    function absorb(gender, distKey, rows){
+      if (!distKey) return;
+      const list = ensureArr(rows).map(canonicalizeRow);
+      if (!list.length) return;
+      if (distKey === "mixed") {
+        out.mixed.mixed.push(...list);
+      } else if (gender === "men" || gender === "women") {
+        out[gender][distKey] = out[gender][distKey] || [];
+        out[gender][distKey].push(...list);
+      }
+    }
+
+    // canonical paths
+    for (const g of ["men","women"]){
+      const bucket = st[g];
+      if (bucket && typeof bucket === "object"){
+        for (const k of Object.keys(bucket)){
+          const dk = normalizeDistanceKey(k);
+          if (dk === "mixed") continue;
+          absorb(g, dk, bucket[k]);
+        }
+      }
+    }
+
+    // mixed bucket
+    const mix = st.mixed;
+    if (mix && typeof mix === "object"){
+      for (const k of Object.keys(mix)){
+        const dk = normalizeDistanceKey(k) || "mixed";
+        absorb("mixed", dk, mix[k]);
+      }
+    }
+
+    // very old top-level distance keys (no gender): assume men by default (safe fallback)
+    for (const k of Object.keys(st)){
+      if (["men","women","mixed","meta","updatedAt"].includes(k)) continue;
+      const dk = normalizeDistanceKey(k);
+      if (["500","1000","1500","relay","mixed"].includes(dk)){
+        absorb("men", dk, st[k]);
+      }
+    }
+
+    // de-dupe (same year + same gold)
+    function dedupe(list){
+      const seen = new Set();
+      const out = [];
+      for (const r of list){
+        const key = cleanKey(r.year) + "|" + cleanKey(r.gold?.name || "") + "|" + cleanKey(r.silver?.name || "") + "|" + cleanKey(r.bronze?.name || "");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(r);
+      }
+      return out;
+    }
+    for (const g of ["men","women"]){
+      for (const d of ["500","1000","1500","relay"]){
+        out[g][d] = dedupe(out[g][d] || []);
+      }
+    }
+    out.mixed.mixed = dedupe(out.mixed.mixed || []);
+
+    return out;
+  }
+  // -------------------------------------------------------------------------
+
 
   function input(placeholder, value, medal=false){
     const i = document.createElement("input");
