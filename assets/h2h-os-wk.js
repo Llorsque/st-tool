@@ -1,17 +1,15 @@
 /**
- * Head-to-Head OS/WK columns (v6) — Relay gender distinction
+ * Head-to-Head OS/WK columns (v7) — strict match by distance AND category (Men/Women)
  *
- * Request:
- * - For Relay head-to-head: OS/WK must distinguish between MEN and WOMEN champions,
- *   based on the Men/Women toggle.
- * - For Mixed Relay: gender toggle does NOT matter.
+ * Requested:
+ * - WK (World Champions) must match the selected distance AND selected category (Men/Women),
+ *   in line with the World Champions module.
+ * - Same principle for OS (Olympic Champions).
  *
- * Implementation:
- * - 500/1000/1500: merge across genders (tolerant if champions were saved under wrong gender).
- * - RELAY: use selected gender strictly (men bucket for Men, women bucket for Women).
- * - MIXED: use mixed bucket only.
- *
- * OS/WK inserted immediately after WT.
+ * Rules:
+ * - 500 / 1000 / 1500: STRICT by gender toggle
+ * - Relay: STRICT by gender toggle
+ * - Mixed Relay: gender toggle ignored (mixed bucket only)
  */
 (function () {
   const WORLD_KEY = "shorttrack_champions_world_v1";
@@ -111,28 +109,21 @@
     return [];
   }
 
-  function keyMatchesDistance(k, distKey, gender) {
+  function keyMatchesDistance(k, distKey) {
     const s = String(k ?? "").toLowerCase().replace(/\s+/g, " ");
     if (distKey === "500") return s.includes("500");
     if (distKey === "1000") return s.includes("1000");
     if (distKey === "1500") return s.includes("1500");
     if (distKey === "mixed") return s.includes("mixed");
-    if (distKey === "relay") {
-      if (!s.includes("relay") || s.includes("mixed")) return false;
-      const hasMen = s.includes(" men") || s.includes("mannen") || s.endsWith("men");
-      const hasWomen = s.includes(" women") || s.includes("vrouwen") || s.endsWith("women");
-      if (hasMen && gender === "women") return false;
-      if (hasWomen && gender === "men") return false;
-      return true;
-    }
+    if (distKey === "relay") return s.includes("relay") && !s.includes("mixed");
     return false;
   }
 
-  function scanBuckets(obj, distKey, gender) {
+  function scanBuckets(obj, distKey) {
     const scanned = [];
     if (!obj) return scanned;
     for (const k of Object.keys(obj)) {
-      if (keyMatchesDistance(k, distKey, gender) && Array.isArray(obj[k])) scanned.push(...obj[k]);
+      if (keyMatchesDistance(k, distKey) && Array.isArray(obj[k])) scanned.push(...obj[k]);
     }
     return scanned;
   }
@@ -145,25 +136,13 @@
       const mixedObj = st.mixed || {};
       let rows = getBucketByExactKeys(mixedObj, ["mixed", ...keys]);
       if (rows.length) return rows;
-      return scanBuckets(mixedObj, "mixed", "men");
+      return scanBuckets(mixedObj, "mixed");
     }
 
-    if (distKey === "relay") {
-      const gObj = (gender === "women") ? (st.women || {}) : (st.men || {});
-      let rows = getBucketByExactKeys(gObj, keys);
-      if (rows.length) return rows;
-      return scanBuckets(gObj, "relay", gender);
-    }
-
-    const menObj = st.men || {};
-    const womenObj = st.women || {};
-
-    const menRowsExact = getBucketByExactKeys(menObj, keys);
-    const womenRowsExact = getBucketByExactKeys(womenObj, keys);
-    let rows = [...menRowsExact, ...womenRowsExact];
+    const gObj = (gender === "women") ? (st.women || {}) : (st.men || {});
+    let rows = getBucketByExactKeys(gObj, keys);
     if (rows.length) return rows;
-
-    return [...scanBuckets(menObj, distKey, gender), ...scanBuckets(womenObj, distKey, gender)];
+    return scanBuckets(gObj, distKey);
   }
 
   function findH2HTable() {
