@@ -1,15 +1,21 @@
 /**
- * Head-to-Head OS/WK columns (v7) — strict match by distance AND category (Men/Women)
+ * Head-to-Head OS/WK columns (v8) — Fix missing Men 1500 WK (flexible champions data shape)
  *
- * Requested:
- * - WK (World Champions) must match the selected distance AND selected category (Men/Women),
- *   in line with the World Champions module.
- * - Same principle for OS (Olympic Champions).
+ * Root cause we address:
+ * - The World/Olympic Champions "Bewerk" module may store rows in different shapes over time
+ *   (nested objects or flat fields). Earlier scripts only supported one shape, causing empty WK/OS.
  *
- * Rules:
- * - 500 / 1000 / 1500: STRICT by gender toggle
- * - Relay: STRICT by gender toggle
- * - Mixed Relay: gender toggle ignored (mixed bucket only)
+ * Fix:
+ * - Robust medal extractor that supports:
+ *    A) row.gold.name / row.gold.land (nested)
+ *    B) row.goldName / row.goldLand (flat)
+ *    C) row["1"], row["1_land"] / row.first, row.firstLand (rank-based)
+ *    D) arrays like [name, land]
+ * - Still STRICT by distance AND gender (Men/Women), mixed ignores gender.
+ *
+ * Output:
+ * - OS and WK inserted immediately after WT.
+ * - Value format: "1 (25)" with multiple lines if multiple medals.
  */
 (function () {
   const WORLD_KEY = "shorttrack_champions_world_v1";
@@ -174,11 +180,64 @@
     return set;
   }
 
+  // --- Flexible medal extraction ---
+  function lowerKeyed(obj){
+    const o = {};
+    if (!obj || typeof obj !== "object") return o;
+    for (const k of Object.keys(obj)) o[String(k).toLowerCase()] = obj[k];
+    return o;
+  }
+
+  function extractNameLand(value){
+    // Supports: {name, land} ; {naam, land} ; [name, land] ; "NAME" ; "NAME CAN"
+    if (!value) return { name: "", land: "" };
+
+    if (Array.isArray(value)) {
+      return { name: String(value[0] ?? "").trim(), land: String(value[1] ?? "").trim() };
+    }
+
+    if (typeof value === "object") {
+      const lk = lowerKeyed(value);
+      const name = String(lk.name ?? lk.naam ?? lk.skater ?? lk.rider ?? "").trim();
+      const land = String(lk.land ?? lk.country ?? lk.nation ?? "").trim();
+      return { name, land };
+    }
+
+    return { name: String(value).trim(), land: "" };
+  }
+
+  function getMedal(row, medalSlot, rank){
+    // medalSlot: 'gold'/'silver'/'bronze'
+    const lk = lowerKeyed(row);
+
+    // A) nested
+    if (row && row[medalSlot]) return extractNameLand(row[medalSlot]);
+
+    // B) flat variants: goldName/goldLand, silverName..., bronzeName...
+    const base = medalSlot.toLowerCase();
+    const nameFlat = lk[base + "name"] ?? lk[base + "_name"] ?? lk[base + "skater"] ?? lk[base + "rider"];
+    const landFlat = lk[base + "land"] ?? lk[base + "_land"] ?? lk[base + "country"] ?? lk[base + "_country"];
+    if (nameFlat || landFlat) return { name: String(nameFlat ?? "").trim(), land: String(landFlat ?? "").trim() };
+
+    // C) rank-based keys: "1", "1_name", "1land", "first", etc.
+    const r = String(rank);
+    const nameRank =
+      lk[r] ?? lk[r + "name"] ?? lk[r + "_name"] ?? lk["rank" + r] ?? lk["rank_" + r] ??
+      (rank === 1 ? (lk.first ?? lk["1st"]) : rank === 2 ? (lk.second ?? lk["2nd"]) : (lk.third ?? lk["3rd"]));
+    const landRank =
+      lk[r + "land"] ?? lk[r + "_land"] ?? lk[r + "country"] ?? lk[r + "_country"] ??
+      (rank === 1 ? (lk.firstland ?? lk.first_country) : rank === 2 ? (lk.secondland ?? lk.second_country) : (lk.thirdland ?? lk.third_country));
+    if (nameRank || landRank) return extractNameLand([nameRank, landRank]);
+
+    return { name: "", land: "" };
+  }
+
   function buildLandSetFromChampions(rows) {
     const s = new Set();
     for (const r of rows || []) {
-      for (const slot of ["gold", "silver", "bronze"]) {
-        const land = String(r?.[slot]?.land ?? "").trim().toUpperCase();
+      for (const slot of [["gold",1],["silver",2],["bronze",3]]) {
+        const med = getMedal(r, slot[0], slot[1]);
+        const land = String(med.land ?? "").trim().toUpperCase();
         if (land && /^[A-Z]{3}$/.test(land)) s.add(land);
       }
     }
@@ -190,6 +249,7 @@
     if (!clean) return "";
     let toks = clean.split(" ").filter(Boolean);
 
+    // remove trailing landcode if user accidentally typed it into the name field
     if (toks.length >= 2 && landSet) {
       const last = toks[toks.length - 1];
       if (landSet.has(last)) toks = toks.slice(0, -1);
@@ -203,15 +263,16 @@
   function buildMedalMap(rows, landSet) {
     const map = new Map();
     for (const r of rows || []) {
-      const yy = yyFromYear(r?.year);
-      const yearNum = parseInt(String(r?.year ?? "").replace(/\D/g, ""), 10);
+      const yy = yyFromYear(r?.year ?? r?.Year ?? r?.jaar ?? r?.JAAR);
+      const yearNum = parseInt(String(r?.year ?? r?.Year ?? r?.jaar ?? "").replace(/\D/g, ""), 10);
       const medals = [
         { slot: "gold", rank: 1 },
         { slot: "silver", rank: 2 },
         { slot: "bronze", rank: 3 },
       ];
       for (const m of medals) {
-        const key = tokenKey(r?.[m.slot]?.name, landSet);
+        const med = getMedal(r, m.slot, m.rank);
+        const key = tokenKey(med.name, landSet);
         if (!key) continue;
         const arr = map.get(key) || [];
         arr.push({ rank: m.rank, yy, yearNum: Number.isNaN(yearNum) ? -1 : yearNum });
@@ -285,6 +346,7 @@
     const worldRows = getBucketsStrict(loadState(WORLD_KEY), distKey, gender);
     const olympicRows = getBucketsStrict(loadState(OLYMPIC_KEY), distKey, gender);
 
+    // land set for name cleanup + tolerate "NAME CAN" mistakes
     const landSet = new Set([
       ...buildLandSetFromChampions(worldRows),
       ...buildLandSetFromChampions(olympicRows),
